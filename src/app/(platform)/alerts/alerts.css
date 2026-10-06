@@ -19,6 +19,14 @@
   gap: 16px;
 }
 
+.al-head-end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .al-stats {
   display: flex;
   flex-wrap: wrap;

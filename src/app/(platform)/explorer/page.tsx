@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import ExplorerView from "./explorer-view";
+import ExplorerView from "./components/explorer-view";
 import "../dashboard/dashboard.css";
 import "./explorer.css";
 
 export const metadata: Metadata = {
-  title: "Search / Explorer — TRACKFORGE",
+  title: "Search / Explorer — SYNAPSE-T",
   description: "Incoming packets, decoded fields, and communication metadata.",
 };
 

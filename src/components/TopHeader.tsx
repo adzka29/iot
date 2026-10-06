@@ -109,15 +109,6 @@ type TopHeaderProps = {
   onPick?: (id: string) => void;
 };
 
-function Shield() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 3.2 19 6v5.5c0 4.2-2.8 7.2-7 8.6-4.2-1.4-7-4.4-7-8.6V6l7-2.8Z" stroke="currentColor" strokeWidth="1.7" />
-      <path d="m8.5 12 2.2 2.2 4.8-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export default function TopHeader({ query, onQueryChange, hits = [], onPick }: TopHeaderProps) {
   const router = useRouter();
   const [userOpen, setUserOpen] = useState(false);
@@ -129,12 +120,9 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
     <header className="cmd-header">
       <Link href="/dashboard" className="cmd-brand">
         <span className="cmd-mark">
-          <Shield />
+          <img src="/images/synapse-t-mark.png" alt="" width={22} height={22} />
         </span>
-        <div>
-          <strong>TRACKFORGE</strong>
-          <small>Real-time situational awareness</small>
-        </div>
+        <img className="cmd-wordmark" src="/images/synapse-t-wordmark.png" alt="SYNAPSE-T" />
       </Link>
       <div className="cmd-search-wrap">
       <label className="cmd-search">
@@ -350,7 +338,7 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
                 </svg>
               </span>
               <h2 id="cmd-logout-title">Log out?</h2>
-              <p>Are you sure you want to log out of TRACKFORGE?</p>
+              <p>Are you sure you want to log out of SYNAPSE-T?</p>
               <div className="cmd-logout-actions">
                 <button type="button" onClick={() => setLogoutOpen(false)}>
                   Cancel

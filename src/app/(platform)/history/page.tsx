@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import HistoryView from "./history-view";
+import HistoryView from "./components/history-view";
 import "../dashboard/dashboard.css";
 import "./history.css";
 
 export const metadata: Metadata = {
-  title: "History — TRACKFORGE",
+  title: "History — SYNAPSE-T",
   description: "View historical activities, telemetry, movements, and system events from your unit.",
 };
 

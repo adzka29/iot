@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import TopHeader from "../dashboard/top-header";
+import TopHeader from "@/components/TopHeader";
 
 type Activity = {
   id: string;
@@ -164,7 +164,7 @@ export default function ActivityView() {
                 <span>Activity</span>
                 <span className="cmd-page-title-accent">Log</span>
               </h1>
-              <p>Monitor and review all user and system activities across the TrackForge platform.</p>
+              <p>Monitor and review all user and system activities across the SYNAPSE-T platform.</p>
             </div>
           </div>
           <div className="act-head-actions">

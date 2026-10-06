@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import TopHeader from "../dashboard/top-header";
+import TopHeader from "@/components/TopHeader";
 
 type Tab = "Identity Registry" | "Role Model" | "Access Binding";
 
@@ -45,7 +45,7 @@ const IDENTITIES: Identity[] = [
     id: "id-1",
     name: "Superadmin",
     username: "superadmin",
-    email: "superadmin@trackforge.id",
+    email: "superadmin@synapse-t.id",
     department: "Platform Administration",
     title: "—",
     type: "Human",
@@ -62,7 +62,7 @@ const ROLES: Role[] = [
     slug: "superadmin",
     category: "Platform Administration",
     description: "Full platform authority.",
-    narrative: "Owns identity, role, and binding administration across TrackForge.",
+    narrative: "Owns identity, role, and binding administration across SYNAPSE-T.",
     baseline: "Reserved for platform owners.",
     bindings: 1,
     system: true,
@@ -236,7 +236,7 @@ export default function AccessView() {
                   </span>
                   <div>
                     <h2 className="cmd-section-title">Identity Registry</h2>
-                    <p>Humans and services that can sign in or call TrackForge APIs.</p>
+                    <p>Humans and services that can sign in or call SYNAPSE-T APIs.</p>
                   </div>
                 </div>
                 <div className="ua-actions">

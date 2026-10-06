@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import TopHeader from "../dashboard/top-header";
+import TopHeader from "@/components/TopHeader";
 
 const activities = [
   { time: "06 Oct 2026, 15:10", text: "Signed in with Email & Password" },
@@ -14,7 +14,7 @@ export default function ProfileView() {
   const [tab, setTab] = useState<"profile" | "activity">("profile");
   const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState("Superadmin");
-  const [email, setEmail] = useState("superadmin@trackforge.id");
+  const [email, setEmail] = useState("superadmin@synapse-t.id");
   const [photo, setPhoto] = useState<string | null>(null);
 
   function onPhoto(file: File | undefined) {

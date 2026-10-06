@@ -173,6 +173,14 @@
   gap: 12px;
 }
 
+.hs-head-end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .hs-tabs {
   display: flex;
   gap: 4px;

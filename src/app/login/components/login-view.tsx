@@ -64,8 +64,8 @@ export default function LoginView() {
     <div className="auth-screen">
       <section className="auth-side">
         <div className="auth-brand">
-          <img className="auth-mark" src="/images/traxon-login-mark.svg" alt="" aria-hidden="true" />
-          <img className="auth-wordmark" src="/images/traxon-wordmark.svg" alt="Traxon" />
+          <img className="auth-mark" src="/images/synapse-t-mark.png" alt="" aria-hidden="true" />
+          <img className="auth-wordmark" src="/images/synapse-t-wordmark.png" alt="SYNAPSE-T" />
         </div>
         <img
           className="auth-hero"
@@ -122,7 +122,8 @@ export default function LoginView() {
       </div>
       <form className="auth-card" onSubmit={onSubmit}>
         <div className="auth-card-brand">
-          <img className="auth-logo-sm" src="/images/traxon-login-mark.svg" alt="Traxon" />
+          <img className="auth-logo-sm" src="/images/synapse-t-mark.png" alt="" aria-hidden="true" />
+          <img className="auth-wordmark" src="/images/synapse-t-wordmark.png" alt="SYNAPSE-T" />
         </div>
         <h1>Sign in</h1>
 

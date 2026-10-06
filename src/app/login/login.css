@@ -264,7 +264,7 @@ html:not([data-theme="gray"]) .auth-feature-card {
 .auth-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   margin-bottom: 16px;
 }
 
@@ -284,24 +284,25 @@ html:not([data-theme="gray"]) .auth-feature-card {
 .auth-side .auth-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   background: transparent;
 }
 
 .auth-mark {
-  width: 56px;
-  height: 56px;
+  width: 58px;
+  height: 58px;
   object-fit: contain;
   flex: none;
+  border-radius: 0;
   background: transparent;
   filter: none;
 }
 
 .auth-wordmark {
   display: block;
-  height: 28px;
+  height: 56px;
   width: auto;
-  max-width: 180px;
+  max-width: min(320px, 48vw);
   object-fit: contain;
   background: transparent;
   filter: none;
@@ -309,8 +310,17 @@ html:not([data-theme="gray"]) .auth-feature-card {
 
 .auth-card-brand {
   display: none;
+  align-items: center;
   justify-content: center;
+  gap: 10px;
   margin-bottom: 10px;
+}
+
+.auth-card-brand strong {
+  color: var(--auth-text);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
 }
 
 .auth-logo-sm {
@@ -318,6 +328,8 @@ html:not([data-theme="gray"]) .auth-feature-card {
   width: 72px;
   height: 72px;
   object-fit: contain;
+  border-radius: 0;
+  background: transparent;
 }
 
 .auth-card-brand .auth-logo-sm,

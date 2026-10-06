@@ -1,8 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import TopHeader from "../dashboard/top-header";
+import TopHeader from "@/components/TopHeader";
 import type { TrackPoint, TrackSource } from "./history-track-map";
 
 const HistoryTrackMap = dynamic(() => import("./history-track-map"), { ssr: false });
@@ -236,13 +237,21 @@ export default function HistoryView({ initialSoldier = "104" }: { initialSoldier
                 <p>View historical activities, telemetry, movements, and system events from your unit.</p>
               </div>
             </div>
-            <div className="hs-tabs">
-              <button type="button" className={tab === "map" ? "is-active" : undefined} onClick={() => setTab("map")}>
-                Timeline & Map
-              </button>
-              <button type="button" className={tab === "summary" ? "is-active" : undefined} onClick={() => setTab("summary")}>
-                Summary
-              </button>
+            <div className="hs-head-end">
+              <div className="hs-tabs">
+                <button type="button" className={tab === "map" ? "is-active" : undefined} onClick={() => setTab("map")}>
+                  Timeline & Map
+                </button>
+                <button type="button" className={tab === "summary" ? "is-active" : undefined} onClick={() => setTab("summary")}>
+                  Summary
+                </button>
+              </div>
+              <Link href="/dashboard" className="cmd-back-map">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M4.5 10.2 12 4.5l7.5 5.7V19a1.5 1.5 0 0 1-1.5 1.5h-3.2v-5.2h-5.6V20.5H6A1.5 1.5 0 0 1 4.5 19v-8.8Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+                </svg>
+                Back to Map
+              </Link>
             </div>
           </header>
 

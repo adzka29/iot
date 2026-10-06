@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
-import TopHeader from "../dashboard/top-header";
+import TopHeader from "@/components/TopHeader";
 import ExplorerChart, { COLORS } from "./explorer-chart";
 import type { ChartBucket } from "./explorer-chart";
 
@@ -215,7 +216,7 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "trackforge-explorer.csv";
+    link.download = "synapse-t-explorer.csv";
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -295,6 +296,12 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
               </svg>
               Export
             </button>
+            <Link href="/dashboard" className="cmd-back-map">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4.5 10.2 12 4.5l7.5 5.7V19a1.5 1.5 0 0 1-1.5 1.5h-3.2v-5.2h-5.6V20.5H6A1.5 1.5 0 0 1 4.5 19v-8.8Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+              </svg>
+              Back to Map
+            </Link>
           </div>
         </header>
 

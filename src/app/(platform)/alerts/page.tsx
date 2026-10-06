@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import AlertsView from "./alerts-view";
+import AlertsView from "./components/alerts-view";
 import "../dashboard/dashboard.css";
 import "./alerts.css";
 
 export const metadata: Metadata = {
-  title: "Alerts — TRACKFORGE",
+  title: "Alerts — SYNAPSE-T",
   description: "Monitor and manage critical events from soldiers and system devices.",
 };
 

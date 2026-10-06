@@ -3,7 +3,7 @@ import LoginView from "./components/login-view";
 import "./login.css";
 
 export const metadata: Metadata = {
-  title: "Sign in — Traxon",
+  title: "Sign in — SYNAPSE-T",
 };
 
 export default function LoginPage() {

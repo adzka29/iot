@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import TopHeader from "./top-header";
+import TopHeader from "@/components/TopHeader";
 
 const OpsMap = dynamic(() => import("./ops-map"), { ssr: false });
 const HistoryMiniMap = dynamic(() => import("./history-mini-map"), { ssr: false });
@@ -847,15 +847,17 @@ export default function DashboardView() {
 
       <div className="cmd-body">
         <section className={`cmd-stage${personOpen ? " has-card" : ""}`} aria-label="Operations map">
-          <OpsMap
-            markers={starterMarkers}
-            showTracks
-            selected={selected}
-            cardOpen={personOpen}
-            focus={focus}
-            onSelect={(id) => choose(id)}
-            onViewChange={onViewChange}
-          />
+          <div className="cmd-map-slot">
+            <OpsMap
+              markers={starterMarkers}
+              showTracks
+              selected={selected}
+              cardOpen={personOpen}
+              focus={focus}
+              onSelect={(id) => choose(id)}
+              onViewChange={onViewChange}
+            />
+          </div>
 
           {personOpen ? (
             <article className="cmd-card">
