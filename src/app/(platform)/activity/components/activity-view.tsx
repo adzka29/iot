@@ -1,149 +1,181 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import TopHeader from "@/components/TopHeader";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_TIME_RANGES,
+  auditCategories,
+  auditClass,
+  auditLabel,
+  formatAuditStamp,
+  listAuditLogs,
+  readAuditLog,
+  summarizeAuditLogs,
+  toAuditParams,
+  type AuditCategory,
+  type AuditDetail,
+  type AuditListItem,
+  type AuditQuery,
+  type AuditSummary,
+} from "@/lib/audit-logs";
 
-type Activity = {
-  id: string;
-  date: string;
-  time: string;
-  title: string;
-  detail: string;
-  category: string;
-  actor: string;
-  target: string;
-  targetKind: string;
-  action: "Login" | "Create" | "Update";
-  outcome: "Success";
-  ip: string;
-  actorType: string;
-};
-
-const categories = [
-  "Authentication",
-  "Personnel",
-  "Groups",
-  "Weapons",
-  "Operations",
-  "Alerts",
-  "Tickets",
-  "History",
-  "Communication",
-  "User Access",
-  "Settings",
-  "Reports",
+const PAGE_OPTIONS = [8, 20, 50, 100];
+const OUTCOMES = [
+  { value: "", label: "All" },
+  { value: "SUCCESS", label: "Success" },
+  { value: "FAILED", label: "Failed" },
+  { value: "DENIED", label: "Denied" },
 ];
-
-const logs: Activity[] = [
-  { id: "1", date: "10/06/26", time: "19:10:53", title: "User Login", detail: "Signed in.", category: "Authentication", actor: "Superadmin", target: "Superadmin", targetKind: "User", action: "Login", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "2", date: "10/06/26", time: "03:20:46", title: "User Login", detail: "Signed in.", category: "Authentication", actor: "Superadmin", target: "Superadmin", targetKind: "User", action: "Login", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "3", date: "10/06/26", time: "00:04:43", title: "Ticket Created", detail: "Created a ticket from an alert.", category: "Tickets", actor: "Superadmin", target: "TK-20261005-002", targetKind: "Ticket", action: "Create", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "4", date: "10/06/26", time: "00:04:30", title: "Operation Created", detail: "Created an operation.", category: "Operations", actor: "Superadmin", target: "OP-2026-001", targetKind: "Operation", action: "Create", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "5", date: "10/06/26", time: "00:03:52", title: "Ticket Closed", detail: "Closed the ticket.", category: "Tickets", actor: "Superadmin", target: "TK-20261005-001", targetKind: "Ticket", action: "Update", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "6", date: "10/06/26", time: "00:03:51", title: "Ticket Resolved", detail: "Resolved the ticket and its source alert.", category: "Tickets", actor: "Superadmin", target: "TK-20261005-001", targetKind: "Ticket", action: "Update", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "7", date: "10/06/26", time: "00:03:49", title: "Ticket Started", detail: "Started working on the ticket.", category: "Tickets", actor: "Superadmin", target: "TK-20261005-001", targetKind: "Ticket", action: "Update", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "8", date: "10/06/26", time: "00:03:47", title: "Ticket Assigned", detail: "Assigned the ticket to Superadmin.", category: "Tickets", actor: "Superadmin", target: "TK-20261005-001", targetKind: "Ticket", action: "Update", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "9", date: "10/05/26", time: "22:18:12", title: "Ticket Updated", detail: "Updated ticket priority.", category: "Tickets", actor: "Superadmin", target: "TK-20261005-002", targetKind: "Ticket", action: "Update", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "10", date: "10/05/26", time: "21:04:08", title: "Ticket Noted", detail: "Added a note to the ticket.", category: "Tickets", actor: "Superadmin", target: "TK-20261005-002", targetKind: "Ticket", action: "Update", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "11", date: "10/05/26", time: "18:41:33", title: "Ticket Reopened", detail: "Reopened the ticket.", category: "Tickets", actor: "Superadmin", target: "TK-20261005-002", targetKind: "Ticket", action: "Update", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "12", date: "10/05/26", time: "16:37:13", title: "User Login", detail: "Signed in.", category: "Authentication", actor: "Superadmin", target: "Superadmin", targetKind: "User", action: "Login", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "13", date: "10/05/26", time: "09:12:04", title: "User Login", detail: "Signed in.", category: "Authentication", actor: "Superadmin", target: "Superadmin", targetKind: "User", action: "Login", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "14", date: "08/12/26", time: "11:22:09", title: "Settings Updated", detail: "Changed notification preferences.", category: "Settings", actor: "Superadmin", target: "Settings", targetKind: "System", action: "Update", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-  { id: "15", date: "07/18/26", time: "08:03:41", title: "Report Generated", detail: "Exported monthly activity report.", category: "Reports", actor: "Superadmin", target: "RPT-2026-07", targetKind: "Report", action: "Create", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
-];
-
-const PAGE_OPTIONS = [8, 25, 50, 100];
-const RANGE_NOW = Date.parse("2026-10-06T17:25:00+07:00");
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function activityStamp(item: Activity) {
-  const [month, day, year] = item.date.split("/");
-  return Date.parse(`20${year}-${month}-${day}T${item.time}+07:00`);
-}
 
 export default function ActivityView() {
   const [query, setQuery] = useState("");
   const [actorQuery, setActorQuery] = useState("");
   const [tableQuery, setTableQuery] = useState("");
-  const [action, setAction] = useState("All Actions");
-  const [outcome, setOutcome] = useState("All");
-  const [actor, setActor] = useState("All Users");
-  const [enabled, setEnabled] = useState<string[]>(categories);
+  const [debouncedActor, setDebouncedActor] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [action, setAction] = useState("");
+  const [outcome, setOutcome] = useState("");
+  const [category, setCategory] = useState("");
   const [sort, setSort] = useState<"recent" | "oldest">("recent");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [selectedId, setSelectedId] = useState<string | null>(logs[1].id);
-  const [checked, setChecked] = useState<string[]>([]);
-  const [range, setRange] = useState<"all" | "30d">("all");
+  const [pageSize, setPageSize] = useState(20);
+  const [range, setRange] = useState("");
   const [rangeOpen, setRangeOpen] = useState(false);
-  const rangeLabel = range === "all" ? "All time" : "30 days";
+  const [categories, setCategories] = useState<AuditCategory[]>([]);
+  const [summary, setSummary] = useState<AuditSummary | null>(null);
+  const [items, setItems] = useState<AuditListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<AuditDetail | null>(null);
+  const [checked, setChecked] = useState<string[]>([]);
 
-  const ranged = useMemo(() => {
-    if (range === "all") return logs;
-    const cutoff = RANGE_NOW - 30 * DAY_MS;
-    return logs.filter((item) => activityStamp(item) >= cutoff);
-  }, [range]);
+  const filters = useMemo<AuditQuery>(() => {
+    const next: AuditQuery = { page, limit: pageSize };
+    if (range) next.timeRange = range;
+    if (debouncedSearch) next.search = debouncedSearch;
+    if (debouncedActor) next.actor = debouncedActor;
+    if (action) next.action = action;
+    if (outcome) next.outcome = outcome;
+    if (category) next.category = category;
+    return next;
+  }, [action, category, debouncedActor, debouncedSearch, outcome, page, pageSize, range]);
 
-  const counts = useMemo(() => {
-    const tally = Object.fromEntries(categories.map((name) => [name, 0]));
-    ranged.forEach((item) => {
-      tally[item.category] += 1;
-    });
-    return tally;
-  }, [ranged]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedActor(actorQuery.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [actorQuery]);
 
-  const filtered = useMemo(() => {
-    const text = `${actorQuery} ${tableQuery}`.trim().toLowerCase();
-    const rows = ranged.filter((item) => {
-      if (!enabled.includes(item.category)) return false;
-      if (action !== "All Actions" && item.action !== action) return false;
-      if (outcome !== "All" && item.outcome !== outcome) return false;
-      if (actor !== "All Users" && item.actor !== actor) return false;
-      if (!text) return true;
-      return `${item.title} ${item.detail} ${item.target} ${item.actor} ${item.category}`.toLowerCase().includes(text);
-    });
-    return sort === "recent" ? rows : [...rows].reverse();
-  }, [action, actor, actorQuery, enabled, outcome, ranged, sort, tableQuery]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(tableQuery.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [tableQuery]);
 
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([summarizeAuditLogs(controller.signal), auditCategories(controller.signal)])
+      .then(([nextSummary, nextCategories]) => {
+        if (controller.signal.aborted) return;
+        setSummary(nextSummary);
+        setCategories(nextCategories.categories);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCategories([]);
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+    listAuditLogs(filters, controller.signal)
+      .then((list) => {
+        if (controller.signal.aborted) return;
+        setItems(list.items);
+        setTotal(list.total);
+        setSelectedId((current) => current ?? list.items[0]?.eventId ?? null);
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setItems([]);
+        setTotal(0);
+        setError(reason instanceof Error ? reason.message : "Couldn't load the activity log");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [filters]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
+    const controller = new AbortController();
+    readAuditLog(selectedId, controller.signal)
+      .then((event) => {
+        if (!controller.signal.aborted) setDetail(event);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setDetail(null);
+      });
+    return () => controller.abort();
+  }, [selectedId]);
+
+  const pages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, pages);
-  const visible = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  useEffect(() => {
+    if (page > pages) setPage(pages);
+  }, [page, pages]);
+
+  const visible = sort === "recent" ? items : [...items].reverse();
   const pageWindow = Math.min(pages, 7);
   const pageStart = Math.min(Math.max(safePage - Math.floor(pageWindow / 2), 1), Math.max(pages - pageWindow + 1, 1));
-  const selected = filtered.find((item) => item.id === selectedId) ?? null;
-  const userActions = ranged.filter((item) => item.actorType === "User").length;
-  const failed = ranged.filter((item) => item.outcome !== "Success").length;
+  const selected = visible.find((item) => item.eventId === selectedId) ?? null;
+  const rangeLabel = AUDIT_TIME_RANGES.find((item) => item.value === range)?.label ?? "All time";
+  const shownFrom = total ? (safePage - 1) * pageSize + 1 : 0;
+  const shownTo = Math.min(safePage * pageSize, total);
 
   function resetFilters() {
     setActorQuery("");
     setTableQuery("");
-    setAction("All Actions");
-    setOutcome("All");
-    setActor("All Users");
-    setEnabled(categories);
-    setRange("all");
+    setDebouncedActor("");
+    setDebouncedSearch("");
+    setAction("");
+    setOutcome("");
+    setCategory("");
+    setRange("");
     setRangeOpen(false);
+    setSelectedId(null);
     setPage(1);
   }
 
-  function toggleCategory(name: string) {
-    setEnabled((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]));
-    setPage(1);
+  async function exportRows() {
+    try {
+      const params = toAuditParams({ ...filters, page: undefined, limit: undefined });
+      const file = await fetch(`/api/audit-logs/export?${params}`, { cache: "no-store" });
+      if (!file.ok) throw new Error("Couldn't export the activity log");
+      const blob = await file.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "activity-log.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Couldn't export the activity log");
+    }
   }
 
-  function exportRows() {
-    const source = checked.length ? filtered.filter((item) => checked.includes(item.id)) : filtered;
-    const header = ["Time", "Event", "Category", "Actor", "Target", "Action", "Outcome"];
-    const body = source.map((item) => [ `${item.date} ${item.time}`, item.title, item.category, item.actor, item.target, item.action, item.outcome ]);
-    const csv = [header, ...body].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "activity-log.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
+  const detailCategory = auditLabel(detail?.category ?? selected?.category);
+  const detailAction = auditLabel(detail?.action ?? selected?.action);
+  const detailOutcome = auditLabel(detail?.outcome ?? selected?.outcome);
+  const detailTargetType = auditLabel(detail?.target.type ?? selected?.target.type);
+  const stamp = selected ? formatAuditStamp(detail?.timestamp ?? selected.timestamp) : null;
 
   return (
     <div className="cmd act">
@@ -187,30 +219,21 @@ export default function ActivityView() {
               </button>
               {rangeOpen ? (
                 <div className="act-range-menu" role="listbox">
-                  <button
-                    type="button"
-                    role="option"
-                    className={range === "all" ? "is-active" : undefined}
-                    onClick={() => {
-                      setRange("all");
-                      setRangeOpen(false);
-                      setPage(1);
-                    }}
-                  >
-                    All time
-                  </button>
-                  <button
-                    type="button"
-                    role="option"
-                    className={range === "30d" ? "is-active" : undefined}
-                    onClick={() => {
-                      setRange("30d");
-                      setRangeOpen(false);
-                      setPage(1);
-                    }}
-                  >
-                    30 days
-                  </button>
+                  {AUDIT_TIME_RANGES.map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      role="option"
+                      className={range === item.value ? "is-active" : undefined}
+                      onClick={() => {
+                        setRange(item.value);
+                        setRangeOpen(false);
+                        setPage(1);
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
                 </div>
               ) : null}
             </div>
@@ -225,10 +248,10 @@ export default function ActivityView() {
         </header>
 
         <section className="act-stats">
-          <Stat icon="total" label="Total Activities" value={ranged.length} color="#60a5fa" />
-          <Stat icon="user" label="User Actions" value={userActions} color="#4ade80" />
-          <Stat icon="system" label="System Actions" value={ranged.length - userActions} color="#a78bfa" />
-          <Stat icon="failed" label="Failed Actions" value={failed} color="#f87171" />
+          <Stat icon="total" label="Total Activities" value={summary?.total_activities ?? 0} color="#60a5fa" />
+          <Stat icon="user" label="User Actions" value={summary?.user_actions ?? 0} color="#4ade80" />
+          <Stat icon="system" label="System Actions" value={summary?.system_actions ?? 0} color="#a78bfa" />
+          <Stat icon="failed" label="Failed Actions" value={summary?.failed_actions ?? 0} color="#f87171" />
         </section>
 
         <div className={`act-grid${selected ? " has-detail" : ""}`}>
@@ -241,18 +264,47 @@ export default function ActivityView() {
               <SearchIcon />
               <input value={actorQuery} placeholder="Search actor..." onChange={(event) => { setActorQuery(event.target.value); setPage(1); }} />
             </label>
-            <FilterSelect label="ACTION" value={action} options={["All Actions", "Login", "Create", "Update"]} onChange={(value) => { setAction(value); setPage(1); }} />
-            <FilterSelect label="OUTCOME" value={outcome} options={["All", "Success"]} onChange={(value) => { setOutcome(value); setPage(1); }} />
-            <FilterSelect label="ACTOR" value={actor} options={["All Users", "Superadmin"]} onChange={(value) => { setActor(value); setPage(1); }} />
+            <FilterSelect
+              label="ACTION"
+              value={action}
+              options={[{ value: "", label: "All Actions" }, ...AUDIT_ACTIONS.map((code) => ({ value: code, label: auditLabel(code) }))]}
+              onChange={(value) => { setAction(value); setPage(1); }}
+            />
+            <FilterSelect
+              label="OUTCOME"
+              value={outcome}
+              options={OUTCOMES}
+              onChange={(value) => { setOutcome(value); setPage(1); }}
+            />
             <p>CATEGORY</p>
             <ul>
-              {categories.map((name) => (
-                <li key={name}>
+              <li>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={category === ""}
+                    onChange={() => {
+                      setCategory("");
+                      setPage(1);
+                    }}
+                  />
+                  All
+                </label>
+              </li>
+              {categories.map((item) => (
+                <li key={item.code}>
                   <label>
-                    <input type="checkbox" checked={enabled.includes(name)} onChange={() => toggleCategory(name)} />
-                    {name}
+                    <input
+                      type="checkbox"
+                      checked={category === item.code}
+                      onChange={() => {
+                        setCategory((current) => (current === item.code ? "" : item.code));
+                        setPage(1);
+                      }}
+                    />
+                    {item.name}
                   </label>
-                  <span>{counts[name]}</span>
+                  <span>{item.count}</span>
                 </li>
               ))}
             </ul>
@@ -269,6 +321,7 @@ export default function ActivityView() {
               </button>
             </div>
             <div className="act-table-scroll">
+              {error ? <p className="act-note">{error}</p> : null}
               <table>
                 <thead>
                   <tr>
@@ -283,42 +336,49 @@ export default function ActivityView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((item) => (
-                    <tr key={item.id} className={item.id === selectedId ? "is-selected" : undefined} onClick={() => setSelectedId(item.id)}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={checked.includes(item.id)}
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={() => setChecked((current) => (current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]))}
-                          aria-label={`Select ${item.title}`}
-                        />
-                      </td>
-                      <td>
-                        <b>{item.date}</b>
-                        <small>{item.time}</small>
-                      </td>
-                      <td>
-                        <b>{item.title}</b>
-                        <small>{item.detail}</small>
-                      </td>
-                      <td><span className={`act-cat is-${item.category.toLowerCase().replaceAll(" ", "-")}`}>{item.category}</span></td>
-                      <td><span className="act-actor"><i>S</i>{item.actor}</span></td>
-                      <td>
-                        <span className="act-target">
-                          <b>{item.target}</b>
-                          <small>{item.targetKind}</small>
-                        </span>
-                      </td>
-                      <td><span className={`act-pill is-${item.action.toLowerCase()}`}>{item.action}</span></td>
-                      <td><span className="act-pill is-success">{item.outcome}</span></td>
+                  {visible.length === 0 ? (
+                    <tr>
+                      <td className="act-empty" colSpan={8}>{loading ? "Loading activity…" : "No activity"}</td>
                     </tr>
-                  ))}
+                  ) : visible.map((item) => {
+                    const when = formatAuditStamp(item.timestamp);
+                    return (
+                      <tr key={item.eventId} className={item.eventId === selectedId ? "is-selected" : undefined} onClick={() => setSelectedId(item.eventId)}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={checked.includes(item.eventId)}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={() => setChecked((current) => (current.includes(item.eventId) ? current.filter((id) => id !== item.eventId) : [...current, item.eventId]))}
+                            aria-label={`Select ${item.event}`}
+                          />
+                        </td>
+                        <td>
+                          <b>{when.date}</b>
+                          <small>{when.time}</small>
+                        </td>
+                        <td>
+                          <b>{item.event}</b>
+                          <small>{item.description}</small>
+                        </td>
+                        <td><span className={`act-cat is-${auditClass(item.category)}`}>{item.category}</span></td>
+                        <td><span className="act-actor"><i>{(item.actor.name ?? "?").slice(0, 1).toUpperCase()}</i>{item.actor.name ?? "—"}</span></td>
+                        <td>
+                          <span className="act-target">
+                            <b>{item.target.name ?? item.target.id ?? "—"}</b>
+                            <small>{auditLabel(item.target.type)}</small>
+                          </span>
+                        </td>
+                        <td><span className={`act-pill is-${auditClass(item.action)}`}>{item.action}</span></td>
+                        <td><span className={`act-pill is-${auditClass(item.outcome)}`}>{item.outcome}</span></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             <footer>
-              <span>Showing {(safePage - 1) * pageSize + (visible.length ? 1 : 0)}-{Math.min(safePage * pageSize, filtered.length)} of {filtered.length} activities</span>
+              <span>Showing {shownFrom}-{shownTo} of {total} activities</span>
               <div>
                 <button type="button" aria-label="Previous page" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>‹</button>
                 {Array.from({ length: pageWindow }, (_, index) => {
@@ -350,51 +410,55 @@ export default function ActivityView() {
             </footer>
           </section>
 
-          {selected ? (
+          {selected && stamp ? (
             <aside className="act-detail">
               <div className="act-detail-head">
                 <strong>Activity Detail</strong>
                 <button type="button" aria-label="Close detail" onClick={() => setSelectedId(null)}>×</button>
               </div>
-              <h2>{selected.title}</h2>
-              <p>{selected.detail}</p>
+              <h2>{selected.event}</h2>
+              <p>{detail?.description ?? selected.description}</p>
               <dl>
                 <div>
                   <dt>Timestamp</dt>
-                  <dd>{selected.date.replace(/(\d{2})$/, "20$1")} {selected.time}</dd>
+                  <dd>{stamp.full}</dd>
                 </div>
                 <div>
                   <dt>Actor</dt>
-                  <dd><span className="act-actor"><i>S</i>{selected.actor}</span></dd>
+                  <dd><span className="act-actor"><i>{(selected.actor.name ?? "?").slice(0, 1).toUpperCase()}</i>{selected.actor.name ?? "—"}</span></dd>
                 </div>
                 <div>
                   <dt>Category</dt>
-                  <dd><span className={`act-cat is-${selected.category.toLowerCase().replaceAll(" ", "-")}`}>{selected.category}</span></dd>
+                  <dd><span className={`act-cat is-${auditClass(detailCategory)}`}>{detailCategory}</span></dd>
                 </div>
                 <div>
                   <dt>Action</dt>
-                  <dd>{selected.action}</dd>
+                  <dd>{detailAction}</dd>
                 </div>
                 <div>
                   <dt>Target</dt>
-                  <dd>{selected.target} <small>{selected.targetKind}</small></dd>
+                  <dd>{selected.target.name ?? selected.target.id ?? "—"} <small>{detailTargetType}</small></dd>
                 </div>
                 <div>
                   <dt>Outcome</dt>
-                  <dd><span className="act-pill is-success">{selected.outcome}</span></dd>
+                  <dd><span className={`act-pill is-${auditClass(detailOutcome)}`}>{detailOutcome}</span></dd>
                 </div>
               </dl>
               <h3>DESCRIPTION</h3>
-              <p>{selected.detail}</p>
+              <p>{detail?.description ?? selected.description}</p>
               <h3>ADDITIONAL INFORMATION</h3>
               <dl>
                 <div>
                   <dt>IP address</dt>
-                  <dd>{selected.ip}</dd>
+                  <dd>{detail?.ipAddress ?? "—"}</dd>
                 </div>
                 <div>
                   <dt>Actor type</dt>
-                  <dd>{selected.actorType}</dd>
+                  <dd>{auditLabel(detail?.actorType)}</dd>
+                </div>
+                <div>
+                  <dt>User agent</dt>
+                  <dd>{detail?.userAgent ?? "—"}</dd>
                 </div>
               </dl>
             </aside>
@@ -429,13 +493,23 @@ function Spark({ color }: { color: string }) {
   );
 }
 
-function FilterSelect({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
   return (
     <label className="act-select">
       {label}
       <select value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
-          <option key={option}>{option}</option>
+          <option key={option.label} value={option.value}>{option.label}</option>
         ))}
       </select>
     </label>

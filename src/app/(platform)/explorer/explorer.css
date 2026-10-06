@@ -257,6 +257,16 @@
   padding: 12px 12px 8px;
 }
 
+.ex-status,
+.ex-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ex-status {
+  margin: 0 12px 8px;
+}
+
 .ex-table-wrap {
   overflow: auto;
 }

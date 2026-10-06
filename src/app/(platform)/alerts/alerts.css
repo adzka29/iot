@@ -12,6 +12,83 @@
   overflow: hidden;
 }
 
+.al-body.has-sos {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.al-sos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+  font-size: 12px;
+}
+
+.al-sos strong {
+  flex: none;
+}
+
+.al-sos button {
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 8px;
+  color: #fff;
+  background: rgba(239, 68, 68, 0.28);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.al-note,
+.al-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.al-note {
+  padding: 8px 12px 0;
+}
+
+.al-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.al-actions button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  color: #d5e2f2;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.al-actions button.is-resolve {
+  border: 0;
+  color: #fff;
+  background: #2563eb;
+}
+
+.al-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .al-head {
   display: flex;
   align-items: flex-start;
@@ -165,8 +242,13 @@
   font-weight: 650;
 }
 
-.al-mini-export {
+.al-filter-actions {
   margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.al-mini-export {
   height: 26px;
   padding: 0 8px;
   border-radius: 8px;
@@ -185,6 +267,18 @@
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.al-status {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  color: #d5e2f2;
+  background: #0b1524;
+  font: inherit;
+  font-size: 12px;
 }
 
 .al-range-toggle {

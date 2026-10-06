@@ -2,8 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { logoutAccount } from "@/lib/profile";
+import {
+  PROFILE_UPDATED,
+  formatProfileDate,
+  loadProfileImage,
+  profileInitials,
+  profileTitle,
+  readProfile,
+  type ProfileUser,
+} from "@/lib/profile";
 
 type Severity = "Critical" | "Warning" | "Info";
 type AlertType =
@@ -114,6 +124,53 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
   const [userOpen, setUserOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [account, setAccount] = useState<ProfileUser | null>(null);
+  const [avatar, setAvatar] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    async function load() {
+      if (!window.localStorage.getItem("session_id")) {
+        if (!ignore) {
+          setAccount(null);
+          setAvatar((current) => {
+            if (current) URL.revokeObjectURL(current);
+            return null;
+          });
+        }
+        return;
+      }
+      try {
+        const user = await readProfile();
+        if (ignore) return;
+        setAccount(user);
+        if (!user.profileImageUrl) {
+          setAvatar((current) => {
+            if (current) URL.revokeObjectURL(current);
+            return null;
+          });
+          return;
+        }
+        const url = await loadProfileImage();
+        if (ignore) {
+          if (url) URL.revokeObjectURL(url);
+          return;
+        }
+        setAvatar((current) => {
+          if (current) URL.revokeObjectURL(current);
+          return url;
+        });
+      } catch {
+        if (!ignore) setAccount(null);
+      }
+    }
+    void load();
+    window.addEventListener(PROFILE_UPDATED, load);
+    return () => {
+      ignore = true;
+      window.removeEventListener(PROFILE_UPDATED, load);
+    };
+  }, []);
 
   return (
     <>
@@ -253,12 +310,12 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
           }}
         >
           <span className="cmd-avatar">
-            S
+            {avatar ? <img src={avatar} alt="" /> : account ? profileInitials(account.fullName) : ""}
             <i />
           </span>
           <span>
-            <strong>Superadmin21</strong>
-            <small>Superadmin</small>
+            <strong>{account?.fullName ?? "Guest"}</strong>
+            <small>{account ? profileTitle(account.role?.name) : "Signed out"}</small>
           </span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -343,7 +400,13 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
                 <button type="button" onClick={() => setLogoutOpen(false)}>
                   Cancel
                 </button>
-                <button type="button" className="is-confirm" onClick={() => router.push("/login")}>
+                <button
+                  type="button"
+                  className="is-confirm"
+                  onClick={() => {
+                    void logoutAccount().finally(() => router.push("/login"));
+                  }}
+                >
                   Log out
                 </button>
               </div>

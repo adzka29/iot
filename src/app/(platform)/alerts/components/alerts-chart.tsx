@@ -13,9 +13,7 @@ import {
 export type AlertChartBucket = {
   time: number;
   label: string;
-  Critical: number;
-  Warning: number;
-  Info: number;
+  count: number;
 };
 
 export const ALERT_COLORS = {
@@ -41,9 +39,7 @@ export default function AlertsChart({ data }: { data: AlertChartBucket[] }) {
           }}
           labelFormatter={(_, payload) => payload?.[0]?.payload?.label ?? ""}
         />
-        <Bar dataKey="Info" stackId="alerts" fill={ALERT_COLORS.Info} maxBarSize={22} />
-        <Bar dataKey="Warning" stackId="alerts" fill={ALERT_COLORS.Warning} maxBarSize={22} />
-        <Bar dataKey="Critical" stackId="alerts" fill={ALERT_COLORS.Critical} maxBarSize={22} />
+        <Bar dataKey="count" fill="#f87171" maxBarSize={22} radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

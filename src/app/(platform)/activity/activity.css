@@ -376,11 +376,26 @@
 .act-cat.is-user-access { color: #c4b5fd; background: rgba(139, 92, 246, 0.16); }
 .act-cat.is-settings { color: #94a3b8; background: rgba(100, 116, 139, 0.16); }
 .act-cat.is-reports { color: #86efac; background: rgba(34, 197, 94, 0.12); }
+.act-cat.is-system { color: #d8b4fe; background: rgba(168, 85, 247, 0.16); }
 
 .act-pill.is-login,
 .act-pill.is-create,
 .act-pill.is-success { color: #4ade80; background: rgba(34, 197, 94, 0.12); }
 .act-pill.is-update { color: #fbbf24; background: rgba(245, 158, 11, 0.14); }
+.act-pill.is-failed,
+.act-pill.is-denied { color: #f87171; background: rgba(239, 68, 68, 0.14); }
+
+.act-note,
+.act-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.act-empty {
+  padding: 28px 12px;
+  text-align: center;
+}
 
 .act-actor,
 .act-target {

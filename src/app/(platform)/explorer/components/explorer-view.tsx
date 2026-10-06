@@ -1,105 +1,47 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import TopHeader from "@/components/TopHeader";
 import ExplorerChart, { COLORS } from "./explorer-chart";
-import type { ChartBucket } from "./explorer-chart";
+import {
+  categoryCounts,
+  categoryLabel,
+  communicationBody,
+  downloadExplorerCsv,
+  entityLabel,
+  entityTypeLabel,
+  explorerOptions,
+  formatEventTime,
+  listExplorer,
+  readExplorer,
+  recordSummary,
+  stripHidden,
+  summarizeExplorer,
+  timelineChart,
+  titleize,
+  type ExplorerOptions,
+  type ExplorerQuery,
+  type ExplorerRecord,
+  type ExplorerSummary,
+} from "@/lib/explorer";
 
-type Level = "Uplink" | "Mesh" | "Telemetry" | "Beacon" | "System" | "Special";
-
-type RecordRow = {
-  id: string;
-  event: string;
-  received: string;
-  stamp: number;
-  entity: string;
-  group: "Alpha" | "Bravo";
-  level: Level;
-  record: string;
-  gateway: string;
-  summary: string;
-  hex: string;
-  decoded: string;
-  communication: string;
-};
-
-const LEVELS: Level[] = ["Uplink", "Mesh", "Telemetry", "Beacon", "System", "Special"];
+const LEVELS = ["Uplink", "Mesh", "Telemetry", "Beacon", "System", "Special"] as const;
 const PAGE_OPTIONS = [8, 25, 50, 100];
-const HEX = "ae11bb2233cc44dd55ee66ff77889900aabbccddeeff00112233445566778899";
-
-function formatStamp(date: Date) {
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = "Oct";
-  const year = date.getFullYear();
-  const time = date.toLocaleTimeString("en-GB", { hour12: false });
-  return `${day} ${month} ${year} ${time}`;
-}
-
-function makeRecords(): RecordRow[] {
-  const entities = ["GW-01", "P-108", "P-107", "P-106", "P-105", "P-104", "P-103", "P-101"];
-  const start = Date.parse("2026-10-04T06:00:00+07:00");
-    const end = Date.parse("2026-10-04T08:30:00+07:00");
-  const mix: Level[] = [
-    ...Array.from({ length: 240 }, () => "Mesh" as const),
-    ...Array.from({ length: 240 }, () => "Telemetry" as const),
-    ...Array.from({ length: 18 }, () => "Beacon" as const),
-    ...Array.from({ length: 3 }, () => "System" as const),
-    ...Array.from({ length: 2 }, () => "Special" as const),
-    ...Array.from({ length: 2 }, () => "Uplink" as const),
-  ];
-  const totals: Record<Level, number> = { Mesh: 240, Telemetry: 240, Beacon: 18, System: 3, Special: 2, Uplink: 2 };
-  const seen: Record<Level, number> = { Mesh: 0, Telemetry: 0, Beacon: 0, System: 0, Special: 0, Uplink: 0 };
-  return mix.map((level, index) => {
-    seen[level] += 1;
-    const progress = (seen[level] - 1) / Math.max(totals[level] - 1, 1);
-    const ratio = level === "Beacon" ? progress : 0.78 + progress * 0.22;
-    const stamp = Math.round(start + (end - start) * Math.min(ratio, 1));
-    const date = new Date(stamp);
-    const entity = level === "Uplink" ? "GW-01" : entities[index % entities.length];
-    const record =
-      level === "Uplink" ? "Satellite Uplink" : level === "Telemetry" ? "Soldier Telemetry" : "Lora Frame";
-    const summary =
-      level === "Uplink" ? "8 packets · 174 B" : level === "Telemetry" ? "GNSS" : `TTL ${4 - (index % 3)} · hop ${index % 3}`;
-    return {
-      id: `rec-${index + 1}`,
-      event: formatStamp(date),
-      received: formatStamp(new Date(stamp + 4000 + (index % 7) * 250)),
-      stamp,
-      entity,
-      group: entity.endsWith("7") || entity.endsWith("8") ? ("Bravo" as const) : ("Alpha" as const),
-      level,
-      record,
-      gateway: index % 9 === 0 ? "GW-02" : "GW-01",
-      summary,
-      hex: HEX.repeat(3),
-      decoded:
-        level === "Uplink"
-          ? "Gateway stores the soldier payload undecoded. This record is transport metadata, not a sensor reading."
-          : level === "Telemetry"
-            ? "Decoded soldier telemetry: GNSS fix, heart rate, and battery snapshot from the chest node."
-            : "LoRa mesh frame forwarded toward the gateway with hop count and TTL remaining.",
-      communication: JSON.stringify(
-        {
-          gateway_id: index % 9 === 0 ? "GW-02" : "GW-01",
-          burst_id: `Burst-20261004-${String(index).padStart(6, "0")}`,
-          packet_count: level === "Uplink" ? 8 : 1,
-          size_bytes: level === "Uplink" ? 174 : 42 + (index % 18),
-          sent_at: formatStamp(date),
-          received_at: formatStamp(new Date(stamp + 4000)),
-          delivery_status: "delivered",
-          retry_count: 0,
-          session_duration_seconds: 18,
-          delivery_mode: "LIVE",
-        },
-        null,
-        2,
-      ),
-    };
-  }).sort((a, b) => b.stamp - a.stamp);
-}
-
-const RECORDS = makeRecords();
+const EMPTY_OPTIONS: ExplorerOptions = {
+  categories: [],
+  data_types: [],
+  entity_types: [],
+  groups: [],
+  gateways: [],
+  position_sources: [],
+  transports: [],
+  freshness: [],
+  severity: [],
+  record_origins: [],
+  raw_formats: [],
+  time_ranges: ["all", "30d"],
+};
 
 function jsonTone(text: string) {
   return text.split(/("(?:\\.|[^"\\])*")/g).map((part, index) => (
@@ -109,116 +51,163 @@ function jsonTone(text: string) {
   ));
 }
 
-function LevelMark({ level }: { level: Level }) {
+function LevelMark({ category }: { category: string }) {
+  const label = categoryLabel(category);
   return (
-    <span className={`ex-level is-${level.toLowerCase()}`}>
+    <span className={`ex-level is-${label.toLowerCase()}`}>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M5 18c3.2-3 5.2-7.5 5.2-12M9.5 18c2.2-2.2 3.4-5.2 3.4-8.8M14 18c1.4-1.4 2.1-3.3 2.1-5.6M18.2 18c.7-.7 1.1-1.7 1.1-2.9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
-      {level}
+      {label}
     </span>
   );
+}
+
+function rangeLabel(value: string) {
+  if (value === "all") return "All time";
+  if (value === "30d") return "30 days";
+  return value;
 }
 
 export default function ExplorerView({ initialQuery = "" }: { initialQuery?: string }) {
   const [query, setQuery] = useState("");
   const [recordQuery, setRecordQuery] = useState(initialQuery);
-  const [entityType, setEntityType] = useState("All");
-  const [group, setGroup] = useState("All Groups");
-  const [level, setLevel] = useState("All Levels");
-  const [recordType, setRecordType] = useState("All Records");
-  const [source, setSource] = useState("All Sources");
-  const [gateway, setGateway] = useState("All Gateways");
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
+  const [entityType, setEntityType] = useState("");
+  const [group, setGroup] = useState("");
+  const [level, setLevel] = useState("");
+  const [recordType, setRecordType] = useState("");
+  const [source, setSource] = useState("");
+  const [gateway, setGateway] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(8);
-  const [selectedId, setSelectedId] = useState<string | null>(RECORDS[0].id);
-  const [range, setRange] = useState<"all" | "30d">("all");
+  const [range, setRange] = useState("all");
   const [rangeOpen, setRangeOpen] = useState(false);
-  const rangeLabel = range === "all" ? "All time" : "30 days";
+  const [options, setOptions] = useState<ExplorerOptions>(EMPTY_OPTIONS);
+  const [items, setItems] = useState<ExplorerRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState<ExplorerSummary | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<ExplorerRecord | null>(null);
+  const [detailError, setDetailError] = useState("");
 
-  const filtered = useMemo(() => {
-    const text = recordQuery.trim().toLowerCase();
-    return RECORDS.filter((row) => {
-      if (entityType === "Gateway" && !row.entity.startsWith("GW")) return false;
-      if (entityType === "Personnel" && !row.entity.startsWith("P-")) return false;
-      if (group !== "All Groups" && row.group !== group) return false;
-      if (level !== "All Levels" && row.level !== level) return false;
-      if (recordType !== "All Records" && row.record !== recordType) return false;
-      if (gateway !== "All Gateways" && row.gateway !== gateway) return false;
-      if (source === "Satellite" && row.level !== "Uplink") return false;
-      if (source === "Radio" && row.level === "Uplink") return false;
-      if (range === "30d") {
-        const cutoff = Date.parse("2026-10-06T17:00:00+07:00") - 30 * 24 * 60 * 60 * 1000;
-        if (row.stamp < cutoff) return false;
-      }
-      if (!text) return true;
-      return `${row.entity} ${row.level} ${row.record} ${row.gateway} ${row.summary}`.toLowerCase().includes(text);
-    });
-  }, [recordQuery, entityType, group, level, recordType, gateway, source, range]);
+  const filters = useMemo<Omit<ExplorerQuery, "limit" | "offset">>(
+    () => ({
+      q: debouncedQuery.trim() || undefined,
+      category: level || undefined,
+      data_type: recordType || undefined,
+      entity_type: entityType || undefined,
+      group_id: group || undefined,
+      gateway_id: gateway || undefined,
+      transport: source || undefined,
+      timeRange: range,
+    }),
+    [debouncedQuery, entityType, group, level, recordType, gateway, source, range],
+  );
 
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(recordQuery), 300);
+    return () => window.clearTimeout(timer);
+  }, [recordQuery]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    explorerOptions(controller.signal)
+      .then((next) => {
+        if (!controller.signal.aborted) setOptions({ ...EMPTY_OPTIONS, ...next, time_ranges: next.time_ranges?.length ? next.time_ranges : ["all", "30d"] });
+      })
+      .catch(() => {
+        /* filters stay on the built-in time ranges until the service answers */
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const started = performance.now();
+    setLoading(true);
+    setError("");
+    Promise.all([
+      listExplorer({ ...filters, limit: pageSize, offset: (page - 1) * pageSize }, controller.signal),
+      summarizeExplorer(filters, controller.signal),
+    ])
+      .then(([list, nextSummary]) => {
+        if (controller.signal.aborted) return;
+        setItems(list.items.map((item) => stripHidden(item)));
+        setTotal(list.total);
+        setSummary(nextSummary);
+        setElapsed(Math.round(performance.now() - started));
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setItems([]);
+        setTotal(0);
+        setSummary(null);
+        setError(reason instanceof Error ? reason.message : "Couldn't load records");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [filters, page, pageSize]);
+
+  useEffect(() => {
+    if (selectedId == null) {
+      setSelected(null);
+      setDetailError("");
+      return;
+    }
+    const controller = new AbortController();
+    setDetailError("");
+    readExplorer(selectedId, controller.signal)
+      .then((record) => {
+        if (controller.signal.aborted) return;
+        setSelected(record);
+        if (!record) setDetailError("Record not available");
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setSelected(null);
+        setDetailError(reason instanceof Error ? reason.message : "Couldn't load record");
+      });
+    return () => controller.abort();
+  }, [selectedId]);
+
+  const pages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, pages);
-  const rows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    if (page > pages) setPage(pages);
+  }, [page, pages]);
   const pageWindow = Math.min(pages, 7);
   const pageStart = Math.min(Math.max(currentPage - Math.floor(pageWindow / 2), 1), Math.max(pages - pageWindow + 1, 1));
-  const selected = selectedId ? filtered.find((row) => row.id === selectedId) ?? null : null;
-  const counts = useMemo(() => {
-    const tally = Object.fromEntries(LEVELS.map((name) => [name, 0])) as Record<Level, number>;
-    filtered.forEach((row) => {
-      tally[row.level] += 1;
-    });
-    return tally;
-  }, [filtered]);
-  const chartData = useMemo(() => {
-    const start = Date.parse("2026-10-04T06:00:00+07:00");
-    const end = Date.parse("2026-10-04T08:30:00+07:00");
-    const step = 5 * 60 * 1000;
-    const buckets: ChartBucket[] = [];
-    for (let time = start; time < end; time += step) {
-      const clock = new Date(time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-      buckets.push({
-        time,
-        label: `04 Oct, ${clock}`,
-        Mesh: 0,
-        Telemetry: 0,
-        Beacon: 0,
-        System: 0,
-        Special: 0,
-        Uplink: 0,
-      });
-    }
-    filtered.forEach((row) => {
-      const index = Math.min(buckets.length - 1, Math.max(0, Math.floor((row.stamp - start) / step)));
-      buckets[index][row.level] += 1;
-    });
-    return buckets;
-  }, [filtered]);
+  const counts = categoryCounts(summary);
+  const chartData = timelineChart(summary?.timeline ?? []);
+  const ranges = options.time_ranges.length ? options.time_ranges : ["all", "30d"];
+  const axisStart = chartData[0]?.label ?? "";
+  const axisEnd = chartData[chartData.length - 1]?.label ?? "";
 
   function clearFilters() {
     setRecordQuery("");
-    setEntityType("All");
-    setGroup("All Groups");
-    setLevel("All Levels");
-    setRecordType("All Records");
-    setSource("All Sources");
-    setGateway("All Gateways");
+    setDebouncedQuery("");
+    setEntityType("");
+    setGroup("");
+    setLevel("");
+    setRecordType("");
+    setSource("");
+    setGateway("");
     setPage(1);
   }
 
-  function exportCsv() {
-    const header = ["Event time", "Received", "Entity", "Level", "Record", "Gateway", "Summary"];
-    const body = filtered.map((row) =>
-      [row.event, row.received, row.entity, row.level, row.record, row.gateway, row.summary]
-        .map((value) => `"${value.replaceAll('"', '""')}"`)
-        .join(","),
-    );
-    const blob = new Blob([[header.join(","), ...body].join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "synapse-t-explorer.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+  async function exportCsv() {
+    try {
+      await downloadExplorerCsv(filters);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Couldn't export records");
+    }
   }
 
   return (
@@ -255,37 +244,28 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
                   <rect x="4" y="5.5" width="16" height="14.5" rx="2" stroke="currentColor" strokeWidth="1.7" />
                   <path d="M8 3.8v3.2M16 3.8v3.2M4 10h16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
                 </svg>
-                {rangeLabel}
+                {rangeLabel(range)}
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
               {rangeOpen ? (
                 <div className="ex-range-menu" role="listbox">
-                  <button
-                    type="button"
-                    role="option"
-                    className={range === "all" ? "is-active" : undefined}
-                    onClick={() => {
-                      setRange("all");
-                      setRangeOpen(false);
-                      setPage(1);
-                    }}
-                  >
-                    All time
-                  </button>
-                  <button
-                    type="button"
-                    role="option"
-                    className={range === "30d" ? "is-active" : undefined}
-                    onClick={() => {
-                      setRange("30d");
-                      setRangeOpen(false);
-                      setPage(1);
-                    }}
-                  >
-                    30 days
-                  </button>
+                  {ranges.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="option"
+                      className={range === value ? "is-active" : undefined}
+                      onClick={() => {
+                        setRange(value);
+                        setRangeOpen(false);
+                        setPage(1);
+                      }}
+                    >
+                      {rangeLabel(value)}
+                    </button>
+                  ))}
                 </div>
               ) : null}
             </div>
@@ -309,7 +289,7 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
           <div className="ex-chart-top">
             <div>
               <h2>Records over time</h2>
-              <small>{filtered.length} records · {rangeLabel}</small>
+              <small>{total} records · {rangeLabel(range)}</small>
             </div>
             <div className="ex-legend">
               {LEVELS.map((name) => (
@@ -324,12 +304,12 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
             <ExplorerChart data={chartData} />
           </div>
           <div className="ex-axis">
-            <span>04 Oct, 06:00</span>
-            <span>04 Oct, 08:30</span>
+            <span>{axisStart}</span>
+            <span>{axisEnd}</span>
           </div>
         </section>
 
-        <div className={`ex-main${selected ? " is-open" : ""}`}>
+        <div className={`ex-main${selected || detailError ? " is-open" : ""}`}>
           <aside className="ex-filters">
             <h2>Filters</h2>
             <label className="ex-search">
@@ -349,51 +329,55 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
             <label>
               Entity Type
               <select value={entityType} onChange={(event) => { setEntityType(event.target.value); setPage(1); }}>
-                <option>All</option>
-                <option>Personnel</option>
-                <option>Gateway</option>
+                <option value="">All</option>
+                {options.entity_types.map((value) => (
+                  <option key={value} value={value}>{entityTypeLabel(value)}</option>
+                ))}
               </select>
             </label>
             <label>
               Group
               <select value={group} onChange={(event) => { setGroup(event.target.value); setPage(1); }}>
-                <option>All Groups</option>
-                <option>Alpha</option>
-                <option>Bravo</option>
+                <option value="">All Groups</option>
+                {options.groups.map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
               </select>
             </label>
             <label>
               Level
               <select value={level} onChange={(event) => { setLevel(event.target.value); setPage(1); }}>
-                <option>All Levels</option>
-                {LEVELS.map((name) => (
-                  <option key={name}>{name}</option>
+                <option value="">All Levels</option>
+                {options.categories.map((value) => (
+                  <option key={value} value={value}>{categoryLabel(value)}</option>
                 ))}
               </select>
             </label>
             <label>
               Record
               <select value={recordType} onChange={(event) => { setRecordType(event.target.value); setPage(1); }}>
-                <option>All Records</option>
-                <option>Satellite Uplink</option>
-                <option>Lora Frame</option>
-                <option>Soldier Telemetry</option>
+                <option value="">All Records</option>
+                {options.data_types.map((value) => (
+                  <option key={value} value={value}>{titleize(value)}</option>
+                ))}
               </select>
             </label>
             <label>
               Source
               <select value={source} onChange={(event) => { setSource(event.target.value); setPage(1); }}>
-                <option>All Sources</option>
-                <option>Satellite</option>
-                <option>Radio</option>
+                <option value="">All Sources</option>
+                {options.transports.map((value) => (
+                  <option key={value} value={value}>{titleize(value)}</option>
+                ))}
               </select>
             </label>
             <label>
               Gateway
               <select value={gateway} onChange={(event) => { setGateway(event.target.value); setPage(1); }}>
-                <option>All Gateways</option>
-                <option>GW-01</option>
-                <option>GW-02</option>
+                <option value="">All Gateways</option>
+                {options.gateways.map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
               </select>
             </label>
             <button type="button" className="ex-clear" onClick={clearFilters}>
@@ -402,7 +386,8 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
           </aside>
 
           <section className="ex-results">
-            <h2>Results ({filtered.length} records)</h2>
+            <h2>Results ({total} records)</h2>
+            {error ? <p className="ex-status">{error}</p> : null}
             <div className="ex-table-wrap">
               <table>
                 <thead>
@@ -417,29 +402,35 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className={selected?.id === row.id ? "is-selected" : undefined}
-                      onClick={() => setSelectedId(row.id)}
-                    >
-                      <td>{row.event.replace(" 2026 ", " ")}</td>
-                      <td>{row.received.replace(" 2026 ", " ")}</td>
-                      <td>{row.entity}</td>
-                      <td>
-                        <LevelMark level={row.level} />
-                      </td>
-                      <td>{row.record}</td>
-                      <td>{row.gateway}</td>
-                      <td>{row.summary}</td>
+                  {items.length === 0 ? (
+                    <tr>
+                      <td className="ex-empty" colSpan={7}>{loading ? "Loading records…" : "No records"}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    items.map((row) => (
+                      <tr
+                        key={row.id}
+                        className={selectedId === row.id ? "is-selected" : undefined}
+                        onClick={() => setSelectedId(row.id)}
+                      >
+                        <td>{formatEventTime(row.event_time)}</td>
+                        <td>{formatEventTime(row.received_at)}</td>
+                        <td>{entityLabel(row)}</td>
+                        <td>
+                          <LevelMark category={row.category} />
+                        </td>
+                        <td>{titleize(row.data_type)}</td>
+                        <td>{row.gateway_id ?? "—"}</td>
+                        <td>{recordSummary(row)}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
             <div className="ex-pager">
               <small>
-                {filtered.length} records · 1073 ms
+                {total} records{elapsed ? ` · ${elapsed} ms` : ""}
               </small>
               <div>
                 <button
@@ -491,7 +482,7 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
             </div>
           </section>
 
-          {selected ? (
+          {selected || detailError ? (
             <aside className="ex-detail">
               <header>
                 <h2>Record</h2>
@@ -499,24 +490,29 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
                   ×
                 </button>
               </header>
-              <h3>Raw payload</h3>
-              <pre className="ex-json">
-                {jsonTone(
-                  JSON.stringify(
-                    {
-                      raw_hex: selected.hex,
-                      raw_format: "HEX",
-                      raw_bytes_length: Math.round(selected.hex.length / 2),
-                    },
-                    null,
-                    2,
-                  ),
-                )}
-              </pre>
-              <h3>Decoded</h3>
-              <p>{selected.decoded}</p>
-              <h3>Communication</h3>
-              <pre className="ex-json">{jsonTone(selected.communication)}</pre>
+              {detailError ? <p>{detailError}</p> : null}
+              {selected ? (
+                <>
+                  <h3>Raw payload</h3>
+                  <pre className="ex-json">
+                    {jsonTone(
+                      JSON.stringify(
+                        {
+                          raw_hex: selected.raw_hex,
+                          raw_format: selected.raw_format,
+                          raw_bytes_length: selected.raw_bytes_length,
+                        },
+                        null,
+                        2,
+                      ),
+                    )}
+                  </pre>
+                  <h3>Decoded</h3>
+                  <pre className="ex-json">{jsonTone(JSON.stringify(selected.data ?? {}, null, 2))}</pre>
+                  <h3>Communication</h3>
+                  <pre className="ex-json">{jsonTone(JSON.stringify(communicationBody(selected), null, 2))}</pre>
+                </>
+              ) : null}
             </aside>
           ) : null}
         </div>

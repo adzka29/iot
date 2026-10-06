@@ -1,31 +1,162 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import TopHeader from "@/components/TopHeader";
+import { formatAuditStamp, listMyAuditLogs, type AuditListItem } from "@/lib/audit-logs";
+import {
+  deleteProfileImage,
+  formatProfileDate,
+  loadProfileImage,
+  profileInitials,
+  profileTitle,
+  readProfile,
+  updateProfile,
+  type ProfileUser,
+} from "@/lib/profile";
 
-const activities = [
-  { time: "06 Oct 2026, 15:10", text: "Signed in with Email & Password" },
-  { time: "06 Oct 2026, 14:02", text: "Viewed the command dashboard" },
-  { time: "05 Oct 2026, 16:37", text: "Account created" },
-];
+const PHOTO_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 export default function ProfileView() {
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"profile" | "activity">("profile");
   const [editing, setEditing] = useState(false);
-  const [fullName, setFullName] = useState("Superadmin");
-  const [email, setEmail] = useState("superadmin@synapse-t.id");
+  const [user, setUser] = useState<ProfileUser | null>(null);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [myActivity, setMyActivity] = useState<AuditListItem[]>([]);
+  const [activityNote, setActivityNote] = useState("");
 
-  function onPhoto(file: File | undefined) {
-    if (!file) return;
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return;
-    if (file.size > 5 * 1024 * 1024) return;
-    const url = URL.createObjectURL(file);
+  function rememberPhoto(url: string | null) {
     setPhoto((current) => {
-      if (current) URL.revokeObjectURL(current);
+      if (current && current !== url) URL.revokeObjectURL(current);
       return url;
     });
+  }
+
+  function applyUser(next: ProfileUser, image: string | null) {
+    setUser(next);
+    setFullName(next.fullName);
+    setEmail(next.email);
+    rememberPhoto(next.profileImageUrl ? image : null);
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setNote("");
+    readProfile(controller.signal)
+      .then(async (next) => {
+        if (controller.signal.aborted) return;
+        const image = next.profileImageUrl ? await loadProfileImage(controller.signal) : null;
+        if (controller.signal.aborted) {
+          if (image) URL.revokeObjectURL(image);
+          return;
+        }
+        applyUser(next, image);
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setUser(null);
+        setNote(reason instanceof Error ? reason.message : "Couldn't load your profile");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "activity") return;
+    const controller = new AbortController();
+    setActivityNote("");
+    listMyAuditLogs({ page: 1, limit: 20 }, controller.signal)
+      .then((list) => {
+        if (!controller.signal.aborted) setMyActivity(list.items);
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setMyActivity([]);
+        setActivityNote(reason instanceof Error ? reason.message : "Couldn't load your activity");
+      });
+    return () => controller.abort();
+  }, [tab]);
+
+  async function onPhoto(file: File | undefined) {
+    if (!file || saving) return;
+    if (!PHOTO_TYPES.includes(file.type)) {
+      setNote("Photo must be PNG, JPEG, or WEBP");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setNote("Photo must be 5 MB or smaller");
+      return;
+    }
+    setSaving(true);
+    setNote("");
+    try {
+      const next = await updateProfile({ profile_image: file });
+      const image = next.profileImageUrl ? await loadProfileImage() : null;
+      applyUser(next, image);
+    } catch (reason) {
+      setNote(reason instanceof Error ? reason.message : "Couldn't update the photo");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removePhoto() {
+    if (!photo || saving) return;
+    setSaving(true);
+    setNote("");
+    try {
+      await deleteProfileImage();
+      const next = await readProfile();
+      applyUser(next, null);
+    } catch (reason) {
+      setNote(reason instanceof Error ? reason.message : "Couldn't remove the photo");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveProfile() {
+    if (!user || saving) return;
+    if (!editing) {
+      setEditing(true);
+      setNote("");
+      return;
+    }
+    const name = fullName.trim();
+    const mail = email.trim();
+    if (!name) {
+      setNote("fullname is required");
+      return;
+    }
+    const fields: { fullname?: string; email?: string } = {};
+    if (name !== user.fullName) fields.fullname = name;
+    if (mail.toLowerCase() !== user.email.toLowerCase()) fields.email = mail;
+    if (!fields.fullname && !fields.email) {
+      setNote("No profile changes");
+      return;
+    }
+    setSaving(true);
+    setNote("");
+    try {
+      const next = await updateProfile(fields);
+      setUser(next);
+      setFullName(next.fullName);
+      setEmail(next.email);
+      setEditing(false);
+    } catch (reason) {
+      setNote(reason instanceof Error ? reason.message : "Couldn't save your profile");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -70,41 +201,47 @@ export default function ProfileView() {
         {tab === "activity" ? (
           <section className="pf-card pf-activity">
             <h2>Activity</h2>
+            {activityNote ? <p className="pf-note">{activityNote}</p> : null}
             <ul>
-              {activities.map((item) => (
-                <li key={item.text}>
-                  <time>{item.time}</time>
-                  <span>{item.text}</span>
+              {myActivity.map((item) => (
+                <li key={item.eventId}>
+                  <time>{formatAuditStamp(item.timestamp).full}</time>
+                  <span>{item.event}</span>
                 </li>
               ))}
             </ul>
+          </section>
+        ) : !user ? (
+          <section className="pf-card">
+            <p className="pf-note">{loading ? "Loading profile…" : note || "Login required"}</p>
+            {!loading ? <Link href="/login">Sign in</Link> : null}
           </section>
         ) : (
           <div className="pf-layout">
             <aside className="pf-card pf-identity">
               <div className="pf-avatar">
-                {photo ? <img src={photo} alt="" /> : <span>SU</span>}
+                {photo ? <img src={photo} alt="" /> : <span>{profileInitials(user.fullName)}</span>}
                 <i />
               </div>
-              <strong>{fullName}</strong>
-              <em>ACTIVE</em>
-              <small>Superadmin</small>
+              <strong>{user.fullName}</strong>
+              <em>{user.status}</em>
+              <small>{profileTitle(user.role?.name)}</small>
               <ul>
                 <li>
                   <Mail />
-                  {email}
+                  {user.email}
                 </li>
                 <li>
                   <Building />
-                  Platform Administration
+                  {user.department ?? "—"}
                 </li>
                 <li>
                   <Clock />
-                  06 Oct 2026, 15:10:53 WIB
+                  {formatProfileDate(user.lastLoginAt)}
                 </li>
                 <li>
                   <Calendar />
-                  Member since 05 Oct 2026, 16:37:13 WIB
+                  Member since {formatProfileDate(user.memberSince)}
                 </li>
               </ul>
             </aside>
@@ -116,13 +253,14 @@ export default function ProfileView() {
                     <h2>Personal Information</h2>
                     <p>Update your name, email, and profile photo.</p>
                   </div>
-                  <button type="button" className="pf-edit" onClick={() => setEditing((value) => !value)}>
+                  <button type="button" className="pf-edit" onClick={saveProfile} disabled={saving}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <path d="M4 20h4.2L19.4 8.8a1.8 1.8 0 0 0 0-2.5l-1.7-1.7a1.8 1.8 0 0 0-2.5 0L4 15.8V20Z" stroke="currentColor" strokeWidth="1.7" />
                     </svg>
-                    {editing ? "Save" : "Edit"}
+                    {saving ? "Saving..." : editing ? "Save" : "Edit"}
                   </button>
                 </div>
+                {note ? <p className="pf-note">{note}</p> : null}
                 <div className="pf-fields">
                   <label>
                     Full Name
@@ -130,7 +268,7 @@ export default function ProfileView() {
                   </label>
                   <label>
                     Username
-                    <input value="superadmin" readOnly />
+                    <input value={user.username} readOnly />
                   </label>
                   <label>
                     Email Address
@@ -138,11 +276,11 @@ export default function ProfileView() {
                   </label>
                   <label>
                     Department
-                    <input value="Platform Administration" readOnly />
+                    <input value={user.department ?? ""} readOnly />
                   </label>
                   <label>
                     Position / Role
-                    <input value="Superadmin" readOnly />
+                    <input value={profileTitle(user.role?.name)} readOnly />
                   </label>
                 </div>
               </section>
@@ -155,7 +293,12 @@ export default function ProfileView() {
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
-                      onChange={(event) => onPhoto(event.target.files?.[0])}
+                      disabled={saving}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        void onPhoto(file);
+                      }}
                     />
                     {photo ? <img src={photo} alt="" /> : <Upload />}
                     <span>{photo ? "Click to replace the photo." : "Drag and drop an image here or click to browse."}</span>
@@ -166,11 +309,16 @@ export default function ProfileView() {
                       <input
                         type="file"
                         accept="image/png,image/jpeg,image/webp"
-                        onChange={(event) => onPhoto(event.target.files?.[0])}
+                        disabled={saving}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          void onPhoto(file);
+                        }}
                       />
                       Change Photo
                     </label>
-                    <button type="button" className="pf-danger" onClick={() => setPhoto(null)} disabled={!photo}>
+                    <button type="button" className="pf-danger" onClick={() => void removePhoto()} disabled={!photo || saving}>
                       Remove Photo
                     </button>
                   </div>
@@ -182,31 +330,31 @@ export default function ProfileView() {
                   <dl>
                     <div>
                       <dt>Account Status</dt>
-                      <dd><b className="is-green">ACTIVE</b></dd>
+                      <dd><b className="is-green">{user.status}</b></dd>
                     </div>
                     <div>
                       <dt>Verification</dt>
-                      <dd><b className="is-blue">VERIFIED</b></dd>
+                      <dd><b className="is-blue">{user.verification}</b></dd>
                     </div>
                     <div>
                       <dt>Access Binding</dt>
-                      <dd><b className="is-cyan">Bound</b></dd>
+                      <dd><b className="is-cyan">{profileTitle(user.accessBinding)}</b></dd>
                     </div>
                     <div>
                       <dt>Account Type</dt>
-                      <dd>Human</dd>
+                      <dd>{user.accountType}</dd>
                     </div>
                     <div>
                       <dt>Last Login</dt>
-                      <dd>06 Oct 2026, 15:10:53 WIB</dd>
+                      <dd>{formatProfileDate(user.lastLoginAt)}</dd>
                     </div>
                     <div>
                       <dt>Login Method</dt>
-                      <dd>Email & Password</dd>
+                      <dd>{user.loginMethod ?? "—"}</dd>
                     </div>
                     <div>
                       <dt>Member Since</dt>
-                      <dd>05 Oct 2026, 16:37:13 WIB</dd>
+                      <dd>{formatProfileDate(user.memberSince)}</dd>
                     </div>
                   </dl>
                 </section>

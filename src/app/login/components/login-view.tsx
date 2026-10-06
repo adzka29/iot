@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { loginAccount } from "@/lib/profile";
 // import ThemeToggle from "@/components/theme-toggle";
 
 function UserIcon() {
@@ -57,7 +58,12 @@ export default function LoginView() {
     setFormError("");
     if (nextAccountError || nextPasswordError) return;
     setPending(true);
-    router.push("/dashboard");
+    loginAccount(account.trim(), password)
+      .then(() => router.push("/dashboard"))
+      .catch((reason: unknown) => {
+        setFormError(reason instanceof Error ? reason.message : "Login failed");
+        setPending(false);
+      });
   };
 
   return (
