@@ -225,9 +225,21 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
       <TopHeader query={query} onQueryChange={setQuery} />
       <main className="ex-body">
         <header className="ex-head">
-          <div>
-            <h1>Search / Explorer</h1>
-            <p>Raw packets, decoded fields, and communication metadata</p>
+          <div className="cmd-page-head">
+            <span className="cmd-page-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.7" />
+                <path d="m16 16 4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </span>
+            <div>
+              <h1 className="cmd-page-title is-split">
+                <span>Search</span>
+                <span className="cmd-page-title-sep">/</span>
+                <span className="cmd-page-title-accent">Explorer</span>
+              </h1>
+              <p>Raw packets, decoded fields, and communication metadata</p>
+            </div>
           </div>
           <div className="ex-head-actions">
             <div className="ex-range">

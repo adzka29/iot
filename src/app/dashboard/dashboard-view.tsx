@@ -474,20 +474,17 @@ function HistoryList({
               <span>{active.place}</span>
             </div>
           ) : null}
-          <button
-            type="button"
+          <Link
+            href={`/history?soldier=${encodeURIComponent(soldierId)}`}
             className="cmd-playback-mainmap"
-            onClick={(event) => {
-              event.stopPropagation();
-              // Wire to main map focus later
-            }}
+            onClick={(event) => event.stopPropagation()}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M4 8.2 12 4l8 4.2-8 4.2L4 8.2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
               <path d="m6.2 12.2 5.8 3 5.8-3M6.2 16.2 12 19.2l5.8-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            View on Main Map
-          </button>
+            Open History
+          </Link>
         </div>
         <div className="cmd-playback">
           <button
@@ -575,7 +572,7 @@ function HistoryList({
               </small>
             </div>
             <Link
-              href={`/explorer?q=${encodeURIComponent(`P-${soldierId}`)}`}
+              href={`/history?soldier=${encodeURIComponent(soldierId)}`}
               className="cmd-event-detail"
               onClick={(event) => event.stopPropagation()}
             >
@@ -609,7 +606,7 @@ function AlertList({ soldierId, items }: { soldierId: string; items: SoldierAler
               </small>
             </div>
             <Link
-              href={`/explorer?q=${encodeURIComponent(`P-${soldierId}`)}`}
+              href={`/alerts?soldier=${encodeURIComponent(soldierId)}&type=${encodeURIComponent(alert.type)}`}
               className="cmd-event-detail"
             >
               View Detail

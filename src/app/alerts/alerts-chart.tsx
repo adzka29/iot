@@ -1,0 +1,50 @@
+"use client";
+
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+export type AlertChartBucket = {
+  time: number;
+  label: string;
+  Critical: number;
+  Warning: number;
+  Info: number;
+};
+
+export const ALERT_COLORS = {
+  Critical: "#ef4444",
+  Warning: "#f59e0b",
+  Info: "#38bdf8",
+};
+
+export default function AlertsChart({ data }: { data: AlertChartBucket[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={88}>
+      <BarChart data={data} barCategoryGap={1} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+        <CartesianGrid vertical={false} stroke="rgba(148,176,214,0.08)" />
+        <XAxis dataKey="time" hide />
+        <YAxis hide />
+        <Tooltip
+          cursor={{ fill: "rgba(255,255,255,0.04)" }}
+          contentStyle={{
+            background: "#10192b",
+            border: "1px solid rgba(148,176,214,0.16)",
+            borderRadius: 10,
+            fontSize: 12,
+          }}
+          labelFormatter={(_, payload) => payload?.[0]?.payload?.label ?? ""}
+        />
+        <Bar dataKey="Info" stackId="alerts" fill={ALERT_COLORS.Info} maxBarSize={22} />
+        <Bar dataKey="Warning" stackId="alerts" fill={ALERT_COLORS.Warning} maxBarSize={22} />
+        <Bar dataKey="Critical" stackId="alerts" fill={ALERT_COLORS.Critical} maxBarSize={22} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}

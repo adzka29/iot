@@ -33,8 +33,21 @@ export default function ProfileView() {
       <TopHeader query={query} onQueryChange={setQuery} />
       <main className="pf-body">
         <header className="pf-head">
-          <h1>My Profile</h1>
-          <p>Manage your personal information and how others see you on the platform.</p>
+          <div className="cmd-page-head">
+            <span className="cmd-page-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.7" />
+                <path d="M5.5 19.2c.8-3.2 3.2-4.8 6.5-4.8s5.7 1.6 6.5 4.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </span>
+            <div>
+              <h1 className="cmd-page-title is-split">
+                <span>My</span>
+                <span className="cmd-page-title-accent">Profile</span>
+              </h1>
+              <p>Manage your personal information and how others see you on the platform.</p>
+            </div>
+          </div>
         </header>
 
         <div className="pf-tabs" role="tablist">

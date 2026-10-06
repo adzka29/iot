@@ -150,9 +150,22 @@ export default function ActivityView() {
       <TopHeader query={query} onQueryChange={setQuery} />
       <main className="act-body">
         <header className="act-head">
-          <div>
-            <h1>Activity Log</h1>
-            <p>Monitor and review all user and system activities across the TrackForge platform.</p>
+          <div className="cmd-page-head">
+            <span className="cmd-page-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M8 6.5h11M8 12h11M8 17.5h11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                <circle cx="4.5" cy="6.5" r="1" fill="currentColor" />
+                <circle cx="4.5" cy="12" r="1" fill="currentColor" />
+                <circle cx="4.5" cy="17.5" r="1" fill="currentColor" />
+              </svg>
+            </span>
+            <div>
+              <h1 className="cmd-page-title is-split">
+                <span>Activity</span>
+                <span className="cmd-page-title-accent">Log</span>
+              </h1>
+              <p>Monitor and review all user and system activities across the TrackForge platform.</p>
+            </div>
           </div>
           <div className="act-head-actions">
             <div className="act-range">

@@ -172,6 +172,7 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
         </div>
       ) : null}
       </div>
+      <div className="cmd-header-end">
       <div className="cmd-notify">
         <button
           className="cmd-notify-btn"
@@ -192,7 +193,12 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
         </button>
         {notesOpen ? (
           <div className="cmd-notify-menu" role="dialog" aria-label="Alerts">
-            <p className="cmd-notify-head">Alerts</p>
+            <p className="cmd-notify-head">
+              Alerts
+              <Link href="/alerts" onClick={() => setNotesOpen(false)}>
+                Open all
+              </Link>
+            </p>
             <div className="cmd-notify-table">
               <table>
                 <thead>
@@ -212,7 +218,7 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
                       key={alert.id}
                       onClick={() => {
                         setNotesOpen(false);
-                        onPick?.(alert.soldierId);
+                        router.push(`/alerts?soldier=${encodeURIComponent(alert.soldierId)}&type=${encodeURIComponent(alert.type)}`);
                       }}
                     >
                       <td>
@@ -288,7 +294,7 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
               </svg>
               Activity Log
             </button>
-            <button type="button" role="menuitem" onClick={() => setUserOpen(false)}>
+            <button type="button" role="menuitem" onClick={() => router.push("/access")}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <circle cx="9" cy="9" r="3" stroke="currentColor" strokeWidth="1.7" />
                 <path d="M3.8 18.5c.7-2.6 2.6-3.9 5.2-3.9s4.5 1.3 5.2 3.9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -320,6 +326,7 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
             </button>
           </div>
         ) : null}
+      </div>
       </div>
     </header>
     {logoutOpen

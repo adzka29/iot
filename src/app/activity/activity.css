@@ -87,18 +87,6 @@
   background: #1d4ed8;
 }
 
-.act-head h1 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 650;
-}
-
-.act-head p {
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .act-export {
   border: 0;
   color: #fff;
@@ -558,8 +546,8 @@
 }
 
 @media (max-height: 760px) {
-  .act-head h1 {
-    font-size: 16px;
+  .act-head .cmd-page-title {
+    font-size: 18px;
   }
 
   .act-stat strong {

@@ -13,14 +13,6 @@
   padding: 14px 18px 14px;
 }
 
-.pf-head h1 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: 0;
-}
-
-.pf-head p,
 .pf-card > p,
 .pf-card-head p {
   margin: 6px 0 0;
@@ -477,7 +469,7 @@
     padding-bottom: 8px;
   }
 
-  .pf-head h1 {
+  .pf-head .cmd-page-title {
     font-size: 18px;
   }
 
