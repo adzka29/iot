@@ -1,0 +1,504 @@
+.pf {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+.pf-body {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 14px 18px 14px;
+}
+
+.pf-head h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.pf-head p,
+.pf-card > p,
+.pf-card-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pf-tabs {
+  display: flex;
+  gap: 18px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pf-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pf-tabs button.is-active {
+  color: #60a5fa;
+  border-bottom-color: #3b82f6;
+}
+
+.pf-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.pf-card {
+  min-height: 0;
+  padding: 14px;
+  border-radius: 14px;
+  background: #10192b;
+  border: 1px solid var(--line);
+}
+
+.pf-card h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.pf-identity {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  text-align: center;
+  padding: 16px 14px 12px;
+  overflow: visible;
+}
+
+.pf-avatar {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #60a5fa, #1d4ed8 70%);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  overflow: hidden;
+}
+
+.pf-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pf-avatar i {
+  position: absolute;
+  right: 6px;
+  bottom: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #2563eb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m6 12 4 4 8-8' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat;
+  border: 2px solid #10192b;
+}
+
+.pf-identity strong {
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.pf-identity em {
+  margin-top: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.12);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.pf-identity small {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pf-identity ul {
+  width: 100%;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  text-align: left;
+}
+
+.pf-identity li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.pf-identity li svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--faint);
+}
+
+.pf-main {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.pf-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pf-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  color: #93c5fd;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pf-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+.pf-fields label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pf-fields input {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: #0b1422;
+  font: inherit;
+  font-size: 13px;
+}
+
+.pf-fields input:read-only {
+  color: #c5d4e8;
+}
+
+.pf-fields small {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.pf-split {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(240px, 0.9fr);
+  gap: 12px;
+}
+
+.pf-split > .pf-card {
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.pf-drop {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  flex: 1;
+  gap: 4px;
+  min-height: 0;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px dashed rgba(148, 176, 214, 0.28);
+  color: var(--muted);
+  text-align: center;
+  cursor: pointer;
+}
+
+.pf-drop input {
+  display: none;
+}
+
+.pf-drop img {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.pf-drop span {
+  font-size: 13px;
+}
+
+.pf-drop small,
+.pf-photo-actions small {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.pf-photo-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.pf-ghost,
+.pf-danger {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pf-ghost {
+  color: var(--text);
+}
+
+.pf-ghost input {
+  display: none;
+}
+
+.pf-danger {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.pf-danger:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pf-card dl {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  margin: 10px 0 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+.pf-card dl div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pf-card dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pf-card dd {
+  margin: 0;
+  font-size: 13px;
+  text-align: right;
+}
+
+.pf-card dd b {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
+.pf-card dd b.is-green {
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.pf-card dd b.is-blue {
+  color: #60a5fa;
+  background: rgba(37, 99, 235, 0.16);
+}
+
+.pf-card dd b.is-cyan {
+  color: #67e8f9;
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.pf-activity ul {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-activity li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.pf-activity time {
+  color: var(--faint);
+}
+
+@media (max-width: 1100px) {
+  .pf-body {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .pf-layout {
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .pf-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pf-fields label:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .pf-avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 18px;
+  }
+
+  .pf-identity ul {
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 760px) {
+  .pf-head p {
+    display: none;
+  }
+
+  .pf-layout,
+  .pf-split {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .pf-identity {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px 12px;
+    padding: 10px 12px;
+    text-align: left;
+  }
+
+  .pf-identity ul {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    margin: 0;
+    padding: 8px 0 0;
+  }
+
+  .pf-identity strong,
+  .pf-identity em,
+  .pf-identity small {
+    margin-top: 0;
+  }
+
+  .pf-main {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .pf-fields {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 8px;
+  }
+
+  .pf-fields input {
+    height: 30px;
+  }
+
+  .pf-drop span {
+    display: none;
+  }
+}
+
+@media (max-height: 760px) {
+  .pf-body {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .pf-head h1 {
+    font-size: 18px;
+  }
+
+  .pf-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 18px;
+  }
+
+  .pf-identity strong {
+    margin-top: 6px;
+  }
+
+  .pf-fields {
+    margin-top: 8px;
+  }
+
+  .pf-fields input,
+  .pf-edit,
+  .pf-ghost,
+  .pf-danger {
+    height: 30px;
+  }
+}
