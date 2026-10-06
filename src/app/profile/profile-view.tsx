@@ -118,7 +118,6 @@ export default function ProfileView() {
                   <label>
                     Username
                     <input value="superadmin" readOnly />
-                    <small>Username cannot be changed.</small>
                   </label>
                   <label>
                     Email Address
@@ -127,12 +126,10 @@ export default function ProfileView() {
                   <label>
                     Department
                     <input value="Platform Administration" readOnly />
-                    <small>Department cannot be changed.</small>
                   </label>
                   <label>
                     Position / Role
                     <input value="Superadmin" readOnly />
-                    <small>Role cannot be changed.</small>
                   </label>
                 </div>
               </section>

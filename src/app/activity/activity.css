@@ -1,15 +1,14 @@
 .act {
-  height: auto;
-  min-height: 100dvh;
-  overflow: visible;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .act-body {
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 8px;
+  gap: 10px;
   padding: 12px 16px 12px;
 }
 
@@ -18,6 +17,74 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.act-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.act-range {
+  position: relative;
+}
+
+.act-range-btn,
+.act-export {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.act-range-btn {
+  color: #d5e2f2;
+  background: #10192b;
+  border: 1px solid var(--line);
+}
+
+.act-range-btn svg:last-child {
+  color: var(--muted);
+}
+
+.act-range-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 100%;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #10192b;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.act-range-menu button {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #d5e2f2;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.act-range-menu button.is-active,
+.act-range-menu button:hover {
+  color: #fff;
+  background: #1d4ed8;
 }
 
 .act-head h1 {
@@ -33,19 +100,9 @@
 }
 
 .act-export {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 12px;
   border: 0;
-  border-radius: 10px;
   color: #fff;
   background: #2563eb;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
 }
 
 .act-stats {
@@ -99,29 +156,39 @@
 
 .act-grid {
   min-height: 0;
-  height: auto;
   display: grid;
-  grid-template-columns: 210px minmax(0, 1fr);
-  gap: 8px;
-}
-
-.act-grid.has-detail {
-  grid-template-columns: 230px minmax(0, 1fr) 280px;
-}
-
-.act-filters,
-.act-table-wrap,
-.act-detail {
+  grid-template-columns: 228px minmax(0, 1fr);
+  overflow: hidden;
   border-radius: 14px;
   background: #10192b;
   border: 1px solid var(--line);
 }
 
+.act-grid.has-detail {
+  grid-template-columns: 228px minmax(0, 1fr) 280px;
+}
+
 .act-filters,
+.act-table-wrap,
 .act-detail {
   min-height: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+}
+
+.act-filters,
+.act-detail {
   overflow: auto;
-  padding: 10px 12px;
+  padding: 10px 8px 10px 12px;
+}
+
+.act-filters {
+  border-right: 1px solid var(--line);
+}
+
+.act-detail {
+  border-left: 1px solid var(--line);
 }
 
 .act-filter-head,
@@ -230,6 +297,8 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .act-toolbar,
@@ -308,8 +377,17 @@
 }
 
 .act-cat.is-authentication { color: #c4b5fd; background: rgba(139, 92, 246, 0.16); }
-.act-cat.is-tickets { color: #fcd34d; background: rgba(245, 158, 11, 0.16); }
+.act-cat.is-personnel { color: #93c5fd; background: rgba(59, 130, 246, 0.16); }
+.act-cat.is-groups { color: #67e8f9; background: rgba(6, 182, 212, 0.16); }
+.act-cat.is-weapons { color: #fdba74; background: rgba(234, 88, 12, 0.16); }
 .act-cat.is-operations { color: #86efac; background: rgba(34, 197, 94, 0.16); }
+.act-cat.is-alerts { color: #fca5a5; background: rgba(239, 68, 68, 0.16); }
+.act-cat.is-tickets { color: #fcd34d; background: rgba(245, 158, 11, 0.16); }
+.act-cat.is-history { color: #cbd5e1; background: rgba(148, 163, 184, 0.14); }
+.act-cat.is-communication { color: #7dd3fc; background: rgba(14, 165, 233, 0.16); }
+.act-cat.is-user-access { color: #c4b5fd; background: rgba(139, 92, 246, 0.16); }
+.act-cat.is-settings { color: #94a3b8; background: rgba(100, 116, 139, 0.16); }
+.act-cat.is-reports { color: #86efac; background: rgba(34, 197, 94, 0.12); }
 
 .act-pill.is-login,
 .act-pill.is-create,
@@ -373,9 +451,22 @@
   background: transparent;
 }
 
-.act-table-wrap footer button.is-active {
-  color: #fff;
-  background: #2563eb;
+.act-table-wrap footer button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.act-page-size select {
+  height: 26px;
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  color: #d5e2f2;
+  background: #0b1524;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
 }
 
 .act-detail h2 {

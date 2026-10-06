@@ -48,9 +48,18 @@ const logs: Activity[] = [
   { id: "11", date: "10/05/26", time: "18:41:33", title: "Ticket Reopened", detail: "Reopened the ticket.", category: "Tickets", actor: "Superadmin", target: "TK-20261005-002", targetKind: "Ticket", action: "Update", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
   { id: "12", date: "10/05/26", time: "16:37:13", title: "User Login", detail: "Signed in.", category: "Authentication", actor: "Superadmin", target: "Superadmin", targetKind: "User", action: "Login", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
   { id: "13", date: "10/05/26", time: "09:12:04", title: "User Login", detail: "Signed in.", category: "Authentication", actor: "Superadmin", target: "Superadmin", targetKind: "User", action: "Login", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
+  { id: "14", date: "08/12/26", time: "11:22:09", title: "Settings Updated", detail: "Changed notification preferences.", category: "Settings", actor: "Superadmin", target: "Settings", targetKind: "System", action: "Update", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
+  { id: "15", date: "07/18/26", time: "08:03:41", title: "Report Generated", detail: "Exported monthly activity report.", category: "Reports", actor: "Superadmin", target: "RPT-2026-07", targetKind: "Report", action: "Create", outcome: "Success", ip: "100.64.0.7", actorType: "User" },
 ];
 
-const pageSize = 10;
+const PAGE_OPTIONS = [8, 25, 50, 100];
+const RANGE_NOW = Date.parse("2026-10-06T17:25:00+07:00");
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function activityStamp(item: Activity) {
+  const [month, day, year] = item.date.split("/");
+  return Date.parse(`20${year}-${month}-${day}T${item.time}+07:00`);
+}
 
 export default function ActivityView() {
   const [query, setQuery] = useState("");
@@ -62,20 +71,30 @@ export default function ActivityView() {
   const [enabled, setEnabled] = useState<string[]>(categories);
   const [sort, setSort] = useState<"recent" | "oldest">("recent");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedId, setSelectedId] = useState<string | null>(logs[1].id);
   const [checked, setChecked] = useState<string[]>([]);
+  const [range, setRange] = useState<"all" | "30d">("all");
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const rangeLabel = range === "all" ? "All time" : "30 days";
+
+  const ranged = useMemo(() => {
+    if (range === "all") return logs;
+    const cutoff = RANGE_NOW - 30 * DAY_MS;
+    return logs.filter((item) => activityStamp(item) >= cutoff);
+  }, [range]);
 
   const counts = useMemo(() => {
     const tally = Object.fromEntries(categories.map((name) => [name, 0]));
-    logs.forEach((item) => {
+    ranged.forEach((item) => {
       tally[item.category] += 1;
     });
     return tally;
-  }, []);
+  }, [ranged]);
 
   const filtered = useMemo(() => {
     const text = `${actorQuery} ${tableQuery}`.trim().toLowerCase();
-    const rows = logs.filter((item) => {
+    const rows = ranged.filter((item) => {
       if (!enabled.includes(item.category)) return false;
       if (action !== "All Actions" && item.action !== action) return false;
       if (outcome !== "All" && item.outcome !== outcome) return false;
@@ -84,14 +103,16 @@ export default function ActivityView() {
       return `${item.title} ${item.detail} ${item.target} ${item.actor} ${item.category}`.toLowerCase().includes(text);
     });
     return sort === "recent" ? rows : [...rows].reverse();
-  }, [action, actor, actorQuery, enabled, outcome, sort, tableQuery]);
+  }, [action, actor, actorQuery, enabled, outcome, ranged, sort, tableQuery]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, pages);
   const visible = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const selected = logs.find((item) => item.id === selectedId) ?? null;
-  const userActions = logs.filter((item) => item.actorType === "User").length;
-  const failed = logs.filter((item) => item.outcome !== "Success").length;
+  const pageWindow = Math.min(pages, 7);
+  const pageStart = Math.min(Math.max(safePage - Math.floor(pageWindow / 2), 1), Math.max(pages - pageWindow + 1, 1));
+  const selected = filtered.find((item) => item.id === selectedId) ?? null;
+  const userActions = ranged.filter((item) => item.actorType === "User").length;
+  const failed = ranged.filter((item) => item.outcome !== "Success").length;
 
   function resetFilters() {
     setActorQuery("");
@@ -100,6 +121,8 @@ export default function ActivityView() {
     setOutcome("All");
     setActor("All Users");
     setEnabled(categories);
+    setRange("all");
+    setRangeOpen(false);
     setPage(1);
   }
 
@@ -131,19 +154,67 @@ export default function ActivityView() {
             <h1>Activity Log</h1>
             <p>Monitor and review all user and system activities across the TrackForge platform.</p>
           </div>
-          <button type="button" className="act-export" onClick={exportRows}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 4v10m0 0 3.5-3.5M12 14 8.5 10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              <path d="M5 18h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-            Export
-          </button>
+          <div className="act-head-actions">
+            <div className="act-range">
+              <button
+                type="button"
+                className="act-range-btn"
+                aria-haspopup="listbox"
+                aria-expanded={rangeOpen}
+                onClick={() => setRangeOpen((open) => !open)}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="4" y="5.5" width="16" height="14.5" rx="2" stroke="currentColor" strokeWidth="1.7" />
+                  <path d="M8 3.8v3.2M16 3.8v3.2M4 10h16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+                {rangeLabel}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {rangeOpen ? (
+                <div className="act-range-menu" role="listbox">
+                  <button
+                    type="button"
+                    role="option"
+                    className={range === "all" ? "is-active" : undefined}
+                    onClick={() => {
+                      setRange("all");
+                      setRangeOpen(false);
+                      setPage(1);
+                    }}
+                  >
+                    All time
+                  </button>
+                  <button
+                    type="button"
+                    role="option"
+                    className={range === "30d" ? "is-active" : undefined}
+                    onClick={() => {
+                      setRange("30d");
+                      setRangeOpen(false);
+                      setPage(1);
+                    }}
+                  >
+                    30 days
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <button type="button" className="act-export" onClick={exportRows}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 4v10m0 0 3.5-3.5M12 14 8.5 10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M5 18h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+              Export
+            </button>
+          </div>
         </header>
 
         <section className="act-stats">
-          <Stat icon="total" label="Total Activities" value={logs.length} color="#60a5fa" />
+          <Stat icon="total" label="Total Activities" value={ranged.length} color="#60a5fa" />
           <Stat icon="user" label="User Actions" value={userActions} color="#4ade80" />
-          <Stat icon="system" label="System Actions" value={logs.length - userActions} color="#a78bfa" />
+          <Stat icon="system" label="System Actions" value={ranged.length - userActions} color="#a78bfa" />
           <Stat icon="failed" label="Failed Actions" value={failed} color="#f87171" />
         </section>
 
@@ -218,7 +289,7 @@ export default function ActivityView() {
                         <b>{item.title}</b>
                         <small>{item.detail}</small>
                       </td>
-                      <td><span className={`act-cat is-${item.category.toLowerCase()}`}>{item.category}</span></td>
+                      <td><span className={`act-cat is-${item.category.toLowerCase().replaceAll(" ", "-")}`}>{item.category}</span></td>
                       <td><span className="act-actor"><i>S</i>{item.actor}</span></td>
                       <td>
                         <span className="act-target">
@@ -236,9 +307,32 @@ export default function ActivityView() {
             <footer>
               <span>Showing {(safePage - 1) * pageSize + (visible.length ? 1 : 0)}-{Math.min(safePage * pageSize, filtered.length)} of {filtered.length} activities</span>
               <div>
-                {Array.from({ length: pages }, (_, index) => index + 1).map((number) => (
-                  <button key={number} type="button" className={number === safePage ? "is-active" : undefined} onClick={() => setPage(number)}>{number}</button>
-                ))}
+                <button type="button" aria-label="Previous page" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>‹</button>
+                {Array.from({ length: pageWindow }, (_, index) => {
+                  const number = pageStart + index;
+                  return (
+                    <button key={number} type="button" className={number === safePage ? "is-active" : undefined} onClick={() => setPage(number)}>
+                      {number}
+                    </button>
+                  );
+                })}
+                <button type="button" aria-label="Next page" disabled={safePage >= pages} onClick={() => setPage(safePage + 1)}>›</button>
+                <label className="act-page-size">
+                  <select
+                    value={pageSize}
+                    aria-label="Rows per page"
+                    onChange={(event) => {
+                      setPageSize(Number(event.target.value));
+                      setPage(1);
+                    }}
+                  >
+                    {PAGE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>
+                        {size} / page
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
             </footer>
           </section>
@@ -262,7 +356,7 @@ export default function ActivityView() {
                 </div>
                 <div>
                   <dt>Category</dt>
-                  <dd><span className={`act-cat is-${selected.category.toLowerCase()}`}>{selected.category}</span></dd>
+                  <dd><span className={`act-cat is-${selected.category.toLowerCase().replaceAll(" ", "-")}`}>{selected.category}</span></dd>
                 </div>
                 <div>
                   <dt>Action</dt>

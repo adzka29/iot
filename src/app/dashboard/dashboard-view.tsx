@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import TopHeader from "./top-header";
 
 const OpsMap = dynamic(() => import("./ops-map"), { ssr: false });
@@ -12,18 +12,60 @@ type Marker = {
   id: string;
   label: string;
   position: [number, number];
-  tone: "ok" | "warn" | "critical" | "info";
+  tone: "ok" | "warn" | "critical" | "info" | "idle";
   kind: "person" | "vehicle" | "ship" | "weapon";
+  group?: "Alpha" | "Bravo";
+  status?: string;
+  role?: "danru";
 };
 
+type SearchHit = {
+  id: string;
+  title: string;
+  hint: string;
+  position: [number, number];
+  target: "person" | "weapon" | "place";
+  zoom?: number;
+};
+
+const MAP_PLACES: SearchHit[] = [
+  { id: "place-monas", title: "Monas", hint: "Area · Jakarta Pusat", position: [-6.175421, 106.827312], target: "place", zoom: 15 },
+  { id: "place-gambir", title: "Gambir", hint: "Daerah · Jakarta Pusat", position: [-6.1764, 106.8304], target: "place", zoom: 15 },
+  { id: "place-menteng", title: "Menteng", hint: "Daerah · Jakarta Pusat", position: [-6.1944, 106.8294], target: "place", zoom: 15 },
+  { id: "place-senen", title: "Senen", hint: "Daerah · Jakarta Pusat", position: [-6.1769, 106.8415], target: "place", zoom: 15 },
+  { id: "place-cikini", title: "Cikini", hint: "Daerah · Jakarta Pusat", position: [-6.1912, 106.8418], target: "place", zoom: 15 },
+  { id: "place-kemayoran", title: "Kemayoran", hint: "Daerah · Jakarta Pusat", position: [-6.1598, 106.8454], target: "place", zoom: 14 },
+  { id: "place-tanah-abang", title: "Tanah Abang", hint: "Daerah · Jakarta Pusat", position: [-6.1856, 106.8117], target: "place", zoom: 15 },
+  { id: "place-sawah-besar", title: "Sawah Besar", hint: "Daerah · Jakarta Pusat", position: [-6.1608, 106.8275], target: "place", zoom: 15 },
+  { id: "place-johar-baru", title: "Johar Baru", hint: "Daerah · Jakarta Pusat", position: [-6.1833, 106.855], target: "place", zoom: 15 },
+  { id: "place-cempaka-putih", title: "Cempaka Putih", hint: "Daerah · Jakarta Pusat", position: [-6.1815, 106.8683], target: "place", zoom: 15 },
+  { id: "place-kota-tua", title: "Kota Tua", hint: "Area · Jakarta Barat", position: [-6.1352, 106.8133], target: "place", zoom: 15 },
+  { id: "place-ancol", title: "Ancol", hint: "Area · Jakarta Utara", position: [-6.1256, 106.8333], target: "place", zoom: 14 },
+  { id: "place-thamrin", title: "Jalan Thamrin", hint: "Lokasi · Jakarta Pusat", position: [-6.1877, 106.823], target: "place", zoom: 16 },
+  { id: "place-sudirman", title: "Jalan Sudirman", hint: "Lokasi · Jakarta Pusat", position: [-6.2088, 106.8216], target: "place", zoom: 15 },
+  { id: "place-istana", title: "Istana Merdeka", hint: "Lokasi · Jakarta Pusat", position: [-6.1702, 106.824], target: "place", zoom: 16 },
+];
+
 const starterMarkers: Marker[] = [
-  { id: "101", label: "101", position: [-6.182, 106.812], tone: "ok", kind: "person" },
-  { id: "103", label: "103", position: [-6.162, 106.835], tone: "ok", kind: "person" },
-  { id: "104", label: "104", position: [-6.175421, 106.827312], tone: "critical", kind: "person" },
-  { id: "107", label: "107", position: [-6.192, 106.821], tone: "ok", kind: "person" },
-  { id: "108", label: "108", position: [-6.168, 106.852], tone: "ok", kind: "person" },
-  { id: "106", label: "106", position: [-6.181, 106.845], tone: "warn", kind: "person" },
-  { id: "107b", label: "107", position: [-6.188, 106.858], tone: "ok", kind: "person" },
+  { id: "101", label: "101", position: [-6.182, 106.812], tone: "ok", kind: "person", group: "Alpha" },
+  { id: "103", label: "103", position: [-6.162, 106.835], tone: "ok", kind: "person", group: "Alpha" },
+  { id: "104", label: "104", position: [-6.175421, 106.827312], tone: "critical", kind: "person", group: "Alpha", role: "danru" },
+  { id: "107", label: "107", position: [-6.192, 106.821], tone: "ok", kind: "person", group: "Bravo", role: "danru" },
+  { id: "108", label: "108", position: [-6.168, 106.852], tone: "ok", kind: "person", group: "Bravo" },
+  { id: "106", label: "106", position: [-6.181, 106.845], tone: "warn", kind: "person", group: "Alpha" },
+  { id: "107b", label: "107", position: [-6.188, 106.858], tone: "ok", kind: "person", group: "Bravo" },
+  { id: "wpn-008", label: "WPN-008", position: [-6.166, 106.814], tone: "ok", kind: "weapon", status: "Connected" },
+  { id: "wpn-015", label: "WPN-015", position: [-6.168, 106.823], tone: "ok", kind: "weapon", status: "Connected" },
+  { id: "wpn-002", label: "WPN-002", position: [-6.174, 106.826], tone: "ok", kind: "weapon", status: "Connected" },
+  { id: "wpn-013", label: "WPN-013", position: [-6.172, 106.808], tone: "critical", kind: "weapon", status: "Disconnected" },
+  { id: "wpn-012", label: "WPN-012", position: [-6.181, 106.825], tone: "warn", kind: "weapon", status: "Low Battery" },
+  { id: "wpn-004", label: "WPN-004", position: [-6.179, 106.832], tone: "warn", kind: "weapon", status: "Low Battery" },
+  { id: "wpn-016", label: "WPN-016", position: [-6.178, 106.848], tone: "warn", kind: "weapon", status: "Low Battery" },
+  { id: "wpn-006", label: "WPN-006", position: [-6.171, 106.842], tone: "ok", kind: "weapon", status: "Connected" },
+  { id: "wpn-011", label: "WPN-011", position: [-6.174, 106.850], tone: "ok", kind: "weapon", status: "Connected" },
+  { id: "wpn-010", label: "WPN-010", position: [-6.186, 106.812], tone: "idle", kind: "weapon", status: "Unassigned" },
+  { id: "wpn-009", label: "WPN-009", position: [-6.190, 106.828], tone: "info", kind: "weapon", status: "Maintenance" },
+  { id: "wpn-014", label: "WPN-014", position: [-6.191, 106.838], tone: "info", kind: "weapon", status: "Maintenance" },
 ];
 
 type Tone = "ok" | "warn" | "bad";
@@ -133,7 +175,7 @@ const dossiers: Record<string, Dossier> = {
     ],
   },
   "104": {
-    unit: "Alpha 1-2 · Group Alpha",
+    unit: "DANRU · Alpha 1-2 · Group Alpha",
     status: "SOS",
     gnss: "±8 m",
     seen: "4 minutes ago",
@@ -211,7 +253,7 @@ const dossiers: Record<string, Dossier> = {
     ],
   },
   "107": {
-    unit: "Bravo 2-1 · Group Bravo",
+    unit: "DANRU · Bravo 2-1 · Group Bravo",
     status: "Active",
     gnss: "±5 m",
     seen: "Just now",
@@ -362,38 +404,152 @@ export default function DashboardView() {
   const [tab, setTab] = useState<Tab>("Overview");
   const [selected, setSelected] = useState("104");
   const [cardOpen, setCardOpen] = useState(true);
+  const [focus, setFocus] = useState<{
+    nonce: number;
+    id: string;
+    position: [number, number];
+    kind: Marker["kind"] | "place";
+    zoom?: number;
+  } | null>(null);
+  const [geoHits, setGeoHits] = useState<SearchHit[]>([]);
 
-  const shownMarkers = starterMarkers.filter((marker) => {
+  useEffect(() => {
+    const text = query.trim();
+    if (text.length < 3) {
+      setGeoHits([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      fetch(`/api/geocode?q=${encodeURIComponent(text)}`)
+        .then((response) => (response.ok ? response.json() : []))
+        .then((rows: SearchHit[]) => setGeoHits(Array.isArray(rows) ? rows : []))
+        .catch(() => setGeoHits([]));
+    }, 320);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const hits = useMemo(() => {
     const text = query.trim().toLowerCase();
-    if (!text) return true;
-    return `${marker.label} soldier ${marker.id}`.toLowerCase().includes(text);
-  });
+    if (!text) return [];
+
+    const coord = text.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+    const coordHit: SearchHit[] = coord
+      ? [
+          {
+            id: `coord-${coord[1]}-${coord[2]}`,
+            title: `${coord[1]}, ${coord[2]}`,
+            hint: "Coordinates",
+            position: [Number(coord[1]), Number(coord[2])],
+            target: "place",
+            zoom: 16,
+          },
+        ]
+      : [];
+
+    const people = starterMarkers.flatMap((marker) => {
+      const dossier = dossiers[marker.id];
+      const title = marker.kind === "person" ? `S-${marker.label}` : marker.label;
+      const haystack = [
+        title,
+        marker.id,
+        marker.kind,
+        marker.group,
+        marker.status,
+        marker.role,
+        dossier?.unit,
+        dossier?.status,
+        marker.kind === "person" ? "personnel soldier" : "weapon",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(text)) return [];
+      const hint = [
+        marker.role === "danru" ? "DANRU" : marker.kind === "weapon" ? "Weapon" : "Personnel",
+        marker.group,
+        marker.status,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return [
+        {
+          id: marker.id,
+          title,
+          hint,
+          position: marker.position,
+          target: marker.kind === "weapon" ? "weapon" : "person",
+        } satisfies SearchHit,
+      ];
+    });
+
+    const areas = MAP_PLACES.filter((place) =>
+      `${place.title} ${place.hint}`.toLowerCase().includes(text),
+    );
+
+    const seen = new Set([...people, ...areas, ...coordHit].map((hit) => hit.title.toLowerCase()));
+    const remote = geoHits.filter((hit) => !seen.has(hit.title.toLowerCase()));
+    return [...coordHit, ...people, ...areas, ...remote].slice(0, 10);
+  }, [query, geoHits]);
 
   function choose(id: string) {
     setSelected(id);
-    setCardOpen(true);
+    const item = starterMarkers.find((entry) => entry.id === id);
+    setCardOpen(item?.kind === "person");
     setTab("Overview");
+  }
+
+  function locate(id: string) {
+    const hit = hits.find((item) => item.id === id);
+    if (hit?.target === "place") {
+      setCardOpen(false);
+      setFocus({
+        nonce: Date.now(),
+        id: hit.id,
+        position: hit.position,
+        kind: "place",
+        zoom: hit.zoom ?? 15,
+      });
+      setQuery("");
+      return;
+    }
+    const item = starterMarkers.find((entry) => entry.id === id);
+    if (!item) return;
+    choose(id);
+    setFocus({
+      nonce: Date.now(),
+      id: item.id,
+      position: item.position,
+      kind: item.kind,
+      zoom: 16,
+    });
+    setQuery("");
   }
 
   const marker = starterMarkers.find((item) => item.id === selected) ?? starterMarkers[2];
   const dossier = dossiers[marker.id] ?? dossiers["104"];
   const place = `${marker.position[0].toFixed(5)}, ${marker.position[1].toFixed(5)}`;
+  const personOpen = cardOpen && marker.kind === "person";
+  const onViewChange = useCallback((view: "group" | "weapons") => {
+    if (view === "weapons") setCardOpen(false);
+  }, []);
 
   return (
     <div className="cmd">
-      <TopHeader query={query} onQueryChange={setQuery} />
+      <TopHeader query={query} onQueryChange={setQuery} hits={hits} onPick={locate} />
 
       <div className="cmd-body">
         <section className="cmd-stage" aria-label="Operations map">
           <OpsMap
-            markers={shownMarkers}
+            markers={starterMarkers}
             showTracks
             selected={selected}
-            cardOpen={cardOpen}
+            cardOpen={personOpen}
+            focus={focus}
             onSelect={(id) => choose(id)}
+            onViewChange={onViewChange}
           />
 
-          {cardOpen ? (
+          {personOpen ? (
             <article className="cmd-card">
               <div className="cmd-identity">
                 <div className={`cmd-portrait is-${marker.tone}`} aria-hidden="true">

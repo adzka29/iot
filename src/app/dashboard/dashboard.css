@@ -65,13 +65,18 @@
   border: 1px solid rgba(34, 211, 238, 0.35);
 }
 
-.cmd-search {
+.cmd-search-wrap {
+  position: relative;
   flex: 1;
+  max-width: 520px;
+}
+
+.cmd-search {
+  width: 100%;
   height: 36px;
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: 520px;
   padding: 0 12px;
   border-radius: 999px;
   color: var(--faint);
@@ -91,6 +96,58 @@
 
 .cmd-search input::placeholder {
   color: var(--faint);
+}
+
+.cmd-search-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #10192b;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.cmd-search-menu p {
+  margin: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cmd-search-menu button {
+  width: 100%;
+  display: block;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cmd-search-menu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cmd-search-menu b,
+.cmd-search-menu small {
+  display: block;
+}
+
+.cmd-search-menu b {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.cmd-search-menu small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .cmd-clock,
@@ -143,54 +200,130 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 20;
-  width: 260px;
-  padding: 6px;
+  z-index: 40;
+  width: min(920px, calc(100vw - 24px));
+  max-height: min(72vh, 540px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-radius: 12px;
   border: 1px solid var(--line);
   background: #10192b;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
 }
 
-.cmd-notify-menu p {
-  margin: 4px 8px 6px;
+.cmd-notify-head {
+  margin: 0;
+  padding: 10px 12px 8px;
   color: var(--muted);
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-.cmd-notify-menu button {
+.cmd-notify-table {
+  overflow: auto;
+}
+
+.cmd-notify-table table {
   width: 100%;
-  display: block;
-  padding: 8px;
-  border: 0;
-  border-radius: 8px;
-  color: var(--text);
-  background: transparent;
-  font: inherit;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.cmd-notify-table th,
+.cmd-notify-table td {
+  padding: 9px 10px;
   text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.cmd-notify-table th {
+  position: sticky;
+  top: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #10192b;
+  border-bottom: 1px solid var(--line);
+}
+
+.cmd-notify-table tbody tr {
   cursor: pointer;
 }
 
-.cmd-notify-menu button:hover {
-  background: rgba(255, 255, 255, 0.06);
+.cmd-notify-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
-.cmd-notify-menu b,
-.cmd-notify-menu small {
+.cmd-notify-table td:nth-child(5),
+.cmd-notify-table td:nth-child(6) {
+  white-space: normal;
+  min-width: 140px;
+}
+
+.cmd-notify-time {
+  color: #d5e2f2;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmd-notify-time small {
   display: block;
-}
-
-.cmd-notify-menu b {
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.cmd-notify-menu small {
   margin-top: 2px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.cmd-sev {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.cmd-sev.is-critical {
+  color: #fecaca;
+  background: #b91c1c;
+}
+
+.cmd-sev.is-warning {
+  color: #fde68a;
+  background: #b45309;
+}
+
+.cmd-sev.is-info {
+  color: #bfdbfe;
+  background: #1d4ed8;
+}
+
+.cmd-notify-type {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #d5e2f2;
+}
+
+.cmd-notify-type svg {
+  flex: none;
+  color: #93a4bd;
+}
+
+.cmd-notify-seen {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cmd-notify-seen b {
+  display: block;
+  color: #d5e2f2;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .cmd-clock {
@@ -501,30 +634,6 @@
   background: #121816;
 }
 
-.cmd-map.is-card-open .leaflet-bottom {
-  bottom: 176px;
-}
-
-.cmd-map .leaflet-control-scale {
-  margin: 0 0 10px 12px;
-}
-
-.cmd-map .leaflet-control-scale-line {
-  padding: 4px 8px 2px;
-  border: 2px solid #7dd3fc;
-  border-top: none;
-  border-radius: 0 0 6px 6px;
-  background: rgba(8, 15, 28, 0.88);
-  color: #e8f0fb;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1.15;
-  letter-spacing: 0.04em;
-  text-align: center;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
-}
-
 .leaflet-div-icon.cmd-marker,
 .leaflet-div-icon.cmd-zone-label,
 .leaflet-div-icon.cmd-person-wrap {
@@ -553,8 +662,25 @@
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
 
-.cmd-person.is-selected .cmd-person-ring {
-  box-shadow: 0 0 0 3px #fff;
+.cmd-person.is-danru .cmd-person-ring {
+  width: 40px;
+  height: 40px;
+  border-color: #f59e0b;
+  background: rgba(36, 22, 6, 0.45);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 0 14px rgba(245, 158, 11, 0.55);
+}
+
+.cmd-person.is-danru.is-selected .cmd-person-ring {
+  box-shadow: 0 0 0 3px #fff, 0 0 14px rgba(245, 158, 11, 0.55);
+}
+
+.cmd-person-role {
+  color: #fbbf24;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
 .cmd-person-label {
@@ -564,6 +690,61 @@
   letter-spacing: 0.02em;
   line-height: 1;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.65);
+}
+
+.leaflet-div-icon.cmd-weapon-wrap {
+  display: grid;
+  place-items: start center;
+  background: transparent;
+  border: 0;
+}
+
+.cmd-weapon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.cmd-weapon-ring {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 3px solid #22c55e;
+  background: rgba(8, 16, 12, 0.78);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.cmd-weapon.is-ok .cmd-weapon-ring { border-color: #22c55e; }
+.cmd-weapon.is-warn .cmd-weapon-ring { border-color: #eab308; }
+.cmd-weapon.is-critical .cmd-weapon-ring { border-color: #ef4444; }
+.cmd-weapon.is-info .cmd-weapon-ring { border-color: #22d3ee; }
+.cmd-weapon.is-idle .cmd-weapon-ring { border-color: #94a3b8; }
+
+.cmd-weapon.is-selected .cmd-weapon-ring {
+  box-shadow: 0 0 0 3px #fff;
+}
+
+.cmd-weapon-label,
+.cmd-weapon-status {
+  color: #fff;
+  line-height: 1.05;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.65);
+}
+
+.cmd-weapon-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.cmd-weapon-status {
+  font-size: 10px;
+  font-weight: 600;
+  color: #e2e8f0;
 }
 
 .cmd-draw {
@@ -703,7 +884,10 @@
   z-index: 500;
 }
 
-.cmd-rail button {
+.cmd-rail > button,
+.cmd-rail > a,
+.cmd-geo > button,
+.cmd-layer > button {
   width: 36px;
   height: 36px;
   display: grid;
@@ -713,39 +897,130 @@
   color: #dbe7f5;
   background: rgba(8, 15, 28, 0.88);
   cursor: pointer;
+  text-decoration: none;
 }
 
-.cmd-rail button:disabled {
+.cmd-rail > button:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-.cmd-rail button.is-active {
+.cmd-rail > button.is-active,
+.cmd-geo > button.is-active,
+.cmd-layer > button.is-active {
   color: #fff;
   background: #1d4ed8;
 }
 
+.cmd-geo,
+.cmd-layer {
+  position: relative;
+}
+
+.cmd-geo-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 600;
+  width: 228px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #10192b;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.cmd-geo-menu p {
+  margin: 0 2px 8px;
+  color: #93a4bd;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cmd-geo-kinds {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.cmd-geo-kinds button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #dbe7f5;
+  background: rgba(255, 255, 255, 0.03);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cmd-geo-kinds button i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.cmd-geo-kinds button.is-active {
+  color: #fff;
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(29, 78, 216, 0.35);
+}
+
+.cmd-geo-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.cmd-geo-actions button {
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cmd-geo-actions .is-apply {
+  color: #fff;
+  background: #1d4ed8;
+}
+
+.cmd-geo-actions .is-delete {
+  color: #fecaca;
+  background: rgba(185, 28, 28, 0.35);
+}
+
+.cmd-geo-actions .is-delete:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.leaflet-tooltip.cmd-zone-tip {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(8, 16, 30, 0.86);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.leaflet-tooltip.cmd-zone-tip::before {
+  display: none;
+}
+
 .cmd-map.is-placing .leaflet-container {
   cursor: crosshair;
-}
-
-.cmd-scale {
-  position: absolute;
-  left: 16px;
-  bottom: 188px;
-  z-index: 2;
-  color: white;
-  font-size: 11px;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
-}
-
-.cmd-scale i {
-  display: block;
-  width: 72px;
-  height: 6px;
-  margin-bottom: 4px;
-  border: 1.5px solid white;
-  border-top: 0;
 }
 
 .cmd-card {
