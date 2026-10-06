@@ -119,9 +119,9 @@ function LevelMark({ level }: { level: Level }) {
   );
 }
 
-export default function ExplorerView() {
+export default function ExplorerView({ initialQuery = "" }: { initialQuery?: string }) {
   const [query, setQuery] = useState("");
-  const [recordQuery, setRecordQuery] = useState("");
+  const [recordQuery, setRecordQuery] = useState(initialQuery);
   const [entityType, setEntityType] = useState("All");
   const [group, setGroup] = useState("All Groups");
   const [level, setLevel] = useState("All Levels");

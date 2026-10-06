@@ -19,11 +19,7 @@ import "leaflet/dist/leaflet.css";
 export const MAP_CENTER: [number, number] = [-6.175421, 106.827312];
 export const MAP_ZOOM = 13;
 
-const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const NIGHT_TILES = "/tiles/{z}/{x}/{y}.png";
-const SATELLITE_TILES =
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-type Basemap = "map" | "satellite" | "night";
 type FenceKind = "restricted" | "silent" | "safe";
 
 type Fence = {
@@ -48,12 +44,6 @@ const LAYER_VIEWS: { id: LayerView; label: string }[] = [
 function kindColor(kind: FenceKind) {
   return FENCE_KINDS.find((item) => item.id === kind)?.color ?? FENCE_KINDS[0].color;
 }
-
-const TILES: Record<Basemap, string> = {
-  map: OSM_TILES,
-  satellite: SATELLITE_TILES,
-  night: NIGHT_TILES,
-};
 
 type MapMarker = {
   id: string;
@@ -224,7 +214,6 @@ export default function OpsMap({
 }: OpsMapProps) {
   const mapRef = useRef<LeafletMap | null>(null);
   const [zoom, setZoom] = useState(MAP_ZOOM);
-  const [basemap, setBasemap] = useState<Basemap>("night");
   const [drawing, setDrawing] = useState(false);
   const [geoOpen, setGeoOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -254,6 +243,13 @@ export default function OpsMap({
       onViewChange?.("group");
     }
   }, [focusNonce, focusKind, onViewChange]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const id = window.setTimeout(() => map.invalidateSize(), 80);
+    return () => window.clearTimeout(id);
+  }, [cardOpen]);
 
   function finishFence() {
     if (finishing.current) return;
@@ -310,7 +306,6 @@ export default function OpsMap({
   return (
     <div
       className={`cmd-map${cardOpen ? " is-card-open" : ""}${drawing ? " is-placing" : ""}${layer === "weapons" ? " is-weapons" : ""}`}
-      data-basemap={basemap}
     >
       <svg className="cmd-night-filter" aria-hidden="true">
         <filter id="cmd-night" colorInterpolationFilters="sRGB" x="0" y="0" width="100%" height="100%">
@@ -348,12 +343,7 @@ export default function OpsMap({
         zoomControl={false}
         attributionControl={false}
       >
-        <TileLayer
-          key={basemap}
-          url={TILES[basemap]}
-          className={basemap === "night" ? "cmd-tiles-night" : ""}
-          maxZoom={19}
-        />
+        <TileLayer url={NIGHT_TILES} className="cmd-tiles-night" maxZoom={19} />
         <ZoomSync onZoom={setZoom} />
         <FlyToFocus focus={focus} />
         <DrawGeofence
@@ -413,25 +403,11 @@ export default function OpsMap({
           />
         ))}
       </MapContainer>
-      <div className="cmd-basemap" role="group" aria-label="Map style">
-        <button
-          type="button"
-          className={basemap === "satellite" ? "is-active" : undefined}
-          onClick={() => setBasemap("satellite")}
-        >
-          Satellite
-        </button>
-        <button
-          type="button"
-          className={basemap === "night" ? "is-active" : undefined}
-          onClick={() => setBasemap("night")}
-        >
-          Night
-        </button>
-      </div>
-      <div className="cmd-rail">
+      <div className="cmd-zoom" role="group" aria-label="Map zoom">
         <button type="button" aria-label="Zoom in" disabled={zoom >= 19} onClick={() => mapRef.current?.zoomIn()}>+</button>
         <button type="button" aria-label="Zoom out" disabled={zoom <= 3} onClick={() => mapRef.current?.zoomOut()}>−</button>
+      </div>
+      <div className="cmd-rail">
         <div className="cmd-geo">
           <button
             type="button"

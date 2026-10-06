@@ -1,12 +1,51 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import TopHeader from "./top-header";
 
 const OpsMap = dynamic(() => import("./ops-map"), { ssr: false });
+const HistoryMiniMap = dynamic(() => import("./history-mini-map"), { ssr: false });
 
-type Tab = "Overview" | "Vitals" | "Equipment" | "Track" | "Events";
+type Tab = "History" | "Events" | "Alerts" | "Reports";
+
+type SoldierAlert = {
+  id: string;
+  time: string;
+  severity: "Critical" | "Warning" | "Info";
+  type: "SOS" | "Casualty" | "Arrhythmia" | "Low Battery" | "Heat Stress" | "Strap Disconnected" | "No Contact";
+  details: string;
+  position: string;
+  seen: string;
+};
+
+function buildAlerts(label: string, status: string): SoldierAlert[] {
+  const base: SoldierAlert[] =
+    status === "SOS"
+      ? [
+          { id: `${label}-sos-1`, time: "14:24", severity: "Critical", type: "SOS", details: "SOS button pressed", position: "GNSS (±8 m)", seen: "4 minutes ago" },
+          { id: `${label}-hr-1`, time: "14:21", severity: "Warning", type: "Arrhythmia", details: "Heart rate elevated (118 bpm)", position: "GNSS (±8 m)", seen: "7 minutes ago" },
+          { id: `${label}-heat-1`, time: "14:05", severity: "Warning", type: "Heat Stress", details: "Body temperature high threshold", position: "GNSS (±9 m)", seen: "23 minutes ago" },
+        ]
+      : status === "Warning"
+        ? [
+            { id: `${label}-bat-1`, time: "14:19", severity: "Warning", type: "Low Battery", details: "Device battery 22%", position: "Mesh (RSSI)", seen: "6 minutes ago" },
+            { id: `${label}-strap-1`, time: "14:14", severity: "Info", type: "Strap Disconnected", details: "Chest strap signal dropping", position: "GNSS (±11 m)", seen: "11 minutes ago" },
+            { id: `${label}-hr-1`, time: "14:08", severity: "Warning", type: "Arrhythmia", details: "Heart rate high (97 bpm)", position: "GNSS (±11 m)", seen: "17 minutes ago" },
+          ]
+        : [
+            { id: `${label}-info-1`, time: "13:48", severity: "Info", type: "No Contact", details: "Brief link delay recovered", position: "GNSS (±6 m)", seen: "36 minutes ago" },
+            { id: `${label}-bat-1`, time: "12:20", severity: "Info", type: "Low Battery", details: "Battery check normal", position: "Mesh (RSSI)", seen: "2 hours ago" },
+          ];
+
+  return [
+    ...base,
+    { id: `${label}-cas-1`, time: "11:40", severity: "Warning", type: "Casualty", details: "No movement detected (algorithm)", position: "GNSS (±14 m)", seen: "3 hours ago" },
+    { id: `${label}-sos-2`, time: "09:12", severity: "Critical", type: "SOS", details: "SOS training ping acknowledged", position: "GNSS (±10 m)", seen: "5 hours ago" },
+    { id: `${label}-strap-2`, time: "08:05", severity: "Info", type: "Strap Disconnected", details: "Chest strap reconnected", position: "GNSS (±7 m)", seen: "6 hours ago" },
+  ];
+}
 
 type Marker = {
   id: string;
@@ -83,6 +122,31 @@ type SoldierEvent = {
   text: string;
 };
 
+function withHistory(events: SoldierEvent[]): SoldierEvent[] {
+  return [
+    ...events,
+    { color: "#3b82f6", time: "13:12", text: "Mesh frame forwarded" },
+    { color: "#22c55e", time: "12:58", text: "Battery report received" },
+    { color: "#3b82f6", time: "12:41", text: "Position update accepted" },
+    { color: "#22c55e", time: "12:19", text: "Telemetry burst delivered" },
+    { color: "#a78bfa", time: "11:54", text: "Gateway handshake ok" },
+    { color: "#3b82f6", time: "11:28", text: "Moved into sector watch" },
+    { color: "#22c55e", time: "11:02", text: "Chest strap heartbeat ok" },
+    { color: "#22c55e", time: "10:37", text: "GNSS lock maintained" },
+    { color: "#3b82f6", time: "10:08", text: "Route waypoint crossed" },
+    { color: "#22c55e", time: "09:44", text: "Radio channel confirmed" },
+  ];
+}
+
+type HistoryStop = {
+  time: string;
+  title: string;
+  place: string;
+  coords: string;
+  source: string;
+  tone: "ok" | "warn" | "stale" | "event";
+};
+
 type Dossier = {
   unit: string;
   status: string;
@@ -91,9 +155,35 @@ type Dossier = {
   overview: Reading[];
   vitals: Reading[];
   gear: Reading[];
-  track: Reading[];
   events: SoldierEvent[];
 };
+
+function buildHistory(label: string, position: [number, number]): HistoryStop[] {
+  const [lat, lng] = position;
+  const seed = Number(label.replace(/\D/g, "")) || 100;
+  const steps: Omit<HistoryStop, "coords">[] = [
+    { time: "14:24", title: "Current position", place: "Near operational sector", source: "GNSS", tone: "ok" },
+    { time: "14:20", title: "Moved northeast along route", place: "Jl. Medan Merdeka Timur", source: "GNSS", tone: "ok" },
+    { time: "14:11", title: "GNSS fix restored", place: "Lapangan Monas edge", source: "GNSS", tone: "ok" },
+    { time: "13:56", title: "Held at rally point", place: "Gedung area south", source: "Dead Reckoning", tone: "warn" },
+    { time: "13:38", title: "Crossed checkpoint B", place: "Jl. Veteran No. 12", source: "Trilateration", tone: "warn" },
+    { time: "13:12", title: "Patrol leg west", place: "Blok M corridor", source: "GNSS", tone: "ok" },
+    { time: "12:47", title: "Brief stop · no vitals burst", place: "Shade point Alpha", source: "Stale", tone: "stale" },
+    { time: "12:19", title: "Entered watch sector", place: "Gate 3 approach", source: "GNSS", tone: "ok" },
+    { time: "11:54", title: "Event marker logged", place: "Comms handoff zone", source: "Event", tone: "event" },
+    { time: "11:21", title: "Moved south on foot", place: "Side street east", source: "Dead Reckoning", tone: "warn" },
+    { time: "10:48", title: "Route waypoint crossed", place: "Intersection 4", source: "GNSS", tone: "ok" },
+    { time: "10:08", title: "Departed staging area", place: "Staging pad Bravo", source: "GNSS", tone: "ok" },
+  ];
+  return steps.map((step, index) => {
+    const dLat = -0.00055 * (index + (seed % 5) * 0.08);
+    const dLng = 0.00042 * ((index % 3) - 1) + 0.0001 * (seed % 7);
+    return {
+      ...step,
+      coords: `${(lat + dLat).toFixed(5)}, ${(lng + dLng).toFixed(5)}`,
+    };
+  });
+}
 
 const dossiers: Record<string, Dossier> = {
   "101": {
@@ -122,18 +212,12 @@ const dossiers: Record<string, Dossier> = {
       { label: "Battery", value: "91%", note: "Pack A · healthy", tone: "ok" },
       { label: "GNSS", value: "Locked", note: "12 satellites", tone: "ok" },
     ],
-    track: [
-      { label: "Last Move", value: "18 m north", note: "Holding position", tone: "ok" },
-      { label: "Heading", value: "012°", note: "Slow walk", tone: "ok" },
-      { label: "Speed", value: "0.4 m/s", note: "On foot", tone: "ok" },
-      { label: "Source", value: "GNSS ±6 m", note: "Fix age 8 s", tone: "ok" },
-    ],
-    events: [
+    events: withHistory([
       { color: "#22c55e", time: "14:26", text: "Telemetry received" },
       { color: "#3b82f6", time: "14:18", text: "Holding position" },
       { color: "#22c55e", time: "14:05", text: "Heart rate resting (74 bpm)" },
       { color: "#22c55e", time: "13:41", text: "Radio check acknowledged" },
-    ],
+    ]),
   },
   "103": {
     unit: "Alpha 1-1 · Group Alpha",
@@ -161,18 +245,12 @@ const dossiers: Record<string, Dossier> = {
       { label: "Battery", value: "77%", note: "Pack A · healthy", tone: "ok" },
       { label: "GNSS", value: "Locked", note: "11 satellites", tone: "ok" },
     ],
-    track: [
-      { label: "Last Move", value: "64 m east", note: "Along the road", tone: "ok" },
-      { label: "Heading", value: "088°", note: "Walking", tone: "ok" },
-      { label: "Speed", value: "1.1 m/s", note: "On foot", tone: "ok" },
-      { label: "Source", value: "GNSS ±7 m", note: "Fix age 12 s", tone: "ok" },
-    ],
-    events: [
+    events: withHistory([
       { color: "#22c55e", time: "14:24", text: "Telemetry received" },
       { color: "#3b82f6", time: "14:16", text: "Moved 64 m east" },
       { color: "#22c55e", time: "14:02", text: "Heart rate normal (81 bpm)" },
       { color: "#22c55e", time: "13:48", text: "Chest strap synced" },
-    ],
+    ]),
   },
   "104": {
     unit: "DANRU · Alpha 1-2 · Group Alpha",
@@ -200,18 +278,12 @@ const dossiers: Record<string, Dossier> = {
       { label: "Battery", value: "64%", note: "Pack A · discharging", tone: "warn" },
       { label: "GNSS", value: "Locked", note: "9 satellites · ±8 m", tone: "ok" },
     ],
-    track: [
-      { label: "Last Move", value: "86 m northeast", note: "Since 14:20", tone: "warn" },
-      { label: "Heading", value: "042°", note: "Away from last stop", tone: "warn" },
-      { label: "Speed", value: "1.6 m/s", note: "On foot", tone: "ok" },
-      { label: "Source", value: "GNSS ±8 m", note: "Fix age 21 s", tone: "ok" },
-    ],
-    events: [
+    events: withHistory([
       { color: "#ef4444", time: "14:24", text: "SOS beacon active" },
       { color: "#f59e0b", time: "14:21", text: "Heart rate elevated (118 bpm)" },
       { color: "#3b82f6", time: "14:20", text: "Moved 86 m northeast" },
       { color: "#22c55e", time: "14:11", text: "GNSS fix restored (±8 m)" },
-    ],
+    ]),
   },
   "106": {
     unit: "Alpha 1-3 · Group Alpha",
@@ -239,18 +311,12 @@ const dossiers: Record<string, Dossier> = {
       { label: "Battery", value: "22%", note: "Under 1 h left", tone: "bad" },
       { label: "GNSS", value: "Locked", note: "8 satellites · ±11 m", tone: "warn" },
     ],
-    track: [
-      { label: "Last Move", value: "40 m south", note: "Slowed down", tone: "warn" },
-      { label: "Heading", value: "176°", note: "On foot", tone: "ok" },
-      { label: "Speed", value: "0.7 m/s", note: "Walking", tone: "ok" },
-      { label: "Source", value: "GNSS ±11 m", note: "Fix age 40 s", tone: "warn" },
-    ],
-    events: [
+    events: withHistory([
       { color: "#ef4444", time: "14:19", text: "Battery low (22%)" },
       { color: "#f59e0b", time: "14:14", text: "Chest strap signal dropping" },
       { color: "#f59e0b", time: "14:08", text: "Heart rate high (97 bpm)" },
       { color: "#3b82f6", time: "13:57", text: "Moved 40 m south" },
-    ],
+    ]),
   },
   "107": {
     unit: "DANRU · Bravo 2-1 · Group Bravo",
@@ -278,18 +344,12 @@ const dossiers: Record<string, Dossier> = {
       { label: "Battery", value: "83%", note: "Pack B · healthy", tone: "ok" },
       { label: "GNSS", value: "Locked", note: "14 satellites", tone: "ok" },
     ],
-    track: [
-      { label: "Last Move", value: "12 m west", note: "Near last report", tone: "ok" },
-      { label: "Heading", value: "268°", note: "Stationary", tone: "ok" },
-      { label: "Speed", value: "0.2 m/s", note: "On foot", tone: "ok" },
-      { label: "Source", value: "GNSS ±5 m", note: "Fix age 4 s", tone: "ok" },
-    ],
-    events: [
+    events: withHistory([
       { color: "#22c55e", time: "14:27", text: "Telemetry received" },
       { color: "#22c55e", time: "14:12", text: "Heart rate resting (76 bpm)" },
       { color: "#3b82f6", time: "13:55", text: "Position hold confirmed" },
       { color: "#22c55e", time: "13:30", text: "Radio check acknowledged" },
-    ],
+    ]),
   },
   "107b": {
     unit: "Bravo 2-2 · Group Bravo",
@@ -317,18 +377,12 @@ const dossiers: Record<string, Dossier> = {
       { label: "Battery", value: "88%", note: "Pack B · healthy", tone: "ok" },
       { label: "GNSS", value: "Locked", note: "13 satellites", tone: "ok" },
     ],
-    track: [
-      { label: "Last Move", value: "35 m southeast", note: "Patrol pace", tone: "ok" },
-      { label: "Heading", value: "142°", note: "Walking", tone: "ok" },
-      { label: "Speed", value: "1.0 m/s", note: "On foot", tone: "ok" },
-      { label: "Source", value: "GNSS ±6 m", note: "Fix age 9 s", tone: "ok" },
-    ],
-    events: [
+    events: withHistory([
       { color: "#22c55e", time: "14:23", text: "Telemetry received" },
       { color: "#3b82f6", time: "14:09", text: "Moved 35 m southeast" },
       { color: "#22c55e", time: "13:58", text: "Heart rate normal (79 bpm)" },
       { color: "#22c55e", time: "13:22", text: "Chest strap synced" },
-    ],
+    ]),
   },
   "108": {
     unit: "Bravo 2-1 · Group Bravo",
@@ -356,18 +410,12 @@ const dossiers: Record<string, Dossier> = {
       { label: "Battery", value: "70%", note: "Pack B · healthy", tone: "ok" },
       { label: "GNSS", value: "Locked", note: "10 satellites", tone: "ok" },
     ],
-    track: [
-      { label: "Last Move", value: "110 m north", note: "Patrol leg", tone: "ok" },
-      { label: "Heading", value: "004°", note: "Walking", tone: "ok" },
-      { label: "Speed", value: "1.3 m/s", note: "On foot", tone: "ok" },
-      { label: "Source", value: "GNSS ±7 m", note: "Fix age 15 s", tone: "ok" },
-    ],
-    events: [
+    events: withHistory([
       { color: "#22c55e", time: "14:25", text: "Telemetry received" },
       { color: "#3b82f6", time: "14:17", text: "Moved 110 m north" },
       { color: "#22c55e", time: "14:01", text: "Heart rate normal (84 bpm)" },
       { color: "#22c55e", time: "13:36", text: "Radio check acknowledged" },
-    ],
+    ]),
   },
 };
 
@@ -382,16 +430,279 @@ function Stat({ label, value, note, tone }: Reading) {
   );
 }
 
-function EventList({ title, items }: { title: string; items: SoldierEvent[] }) {
+function parseCoords(coords: string): [number, number] {
+  const [lat, lng] = coords.split(",").map((part) => Number(part.trim()));
+  return [lat, lng];
+}
+
+function HistoryList({
+  soldierId,
+  items,
+}: {
+  soldierId: string;
+  items: HistoryStop[];
+}) {
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [index, setIndex] = useState(0);
+  const active = items[Math.min(index, items.length - 1)] ?? null;
+  const progress = items.length <= 1 ? 100 : (index / (items.length - 1)) * 100;
+  const path = useMemo(() => items.map((item) => parseCoords(item.coords)), [items]);
+
+  useEffect(() => {
+    if (!playing || items.length === 0) return;
+    const id = window.setInterval(() => {
+      setIndex((current) => {
+        if (current >= items.length - 1) {
+          setPlaying(false);
+          return current;
+        }
+        return current + 1;
+      });
+    }, Math.max(280, 900 / speed));
+    return () => window.clearInterval(id);
+  }, [playing, speed, items.length]);
+
   return (
-    <div className="cmd-events">
+    <div className="cmd-history">
+      <div className="cmd-playback-card">
+        <div className="cmd-playback-map">
+          <HistoryMiniMap path={path} index={index} />
+          {active ? (
+            <div className="cmd-playback-pin">
+              <strong>{active.time}</strong>
+              <span>{active.place}</span>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className="cmd-playback-mainmap"
+            onClick={(event) => {
+              event.stopPropagation();
+              // Wire to main map focus later
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 8.2 12 4l8 4.2-8 4.2L4 8.2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+              <path d="m6.2 12.2 5.8 3 5.8-3M6.2 16.2 12 19.2l5.8-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            View on Main Map
+          </button>
+        </div>
+        <div className="cmd-playback">
+          <button
+            type="button"
+            className="cmd-playback-play"
+            aria-label={playing ? "Pause playback" : "Play playback"}
+            onClick={() => {
+              if (!playing && index >= items.length - 1) setIndex(0);
+              setPlaying((value) => !value);
+            }}
+          >
+            {playing ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <rect x="6" y="5" width="4" height="14" rx="1" />
+                <rect x="14" y="5" width="4" height="14" rx="1" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M8 5.5v13l11-6.5L8 5.5Z" />
+              </svg>
+            )}
+          </button>
+          <div className="cmd-playback-main">
+            <div className="cmd-playback-times">
+              <span>06 Oct 2026 00:00</span>
+              <span>06 Oct 2026 23:59</span>
+            </div>
+            <label className="cmd-playback-track">
+              <span className="cmd-playback-fill" style={{ width: `${progress}%` }} />
+              {active ? <b style={{ left: `${progress}%` }}>{active.time}:00</b> : null}
+              <input
+                type="range"
+                min={0}
+                max={Math.max(items.length - 1, 0)}
+                value={index}
+                aria-label="Playback position"
+                onChange={(event) => {
+                  setPlaying(false);
+                  setIndex(Number(event.target.value));
+                }}
+              />
+            </label>
+            {active ? (
+              <p className="cmd-playback-now">
+                {active.title} · {active.source}
+              </p>
+            ) : null}
+          </div>
+          <label className="cmd-playback-speed">
+            <span className="sr-only">Playback speed</span>
+            <select
+              value={speed}
+              aria-label="Playback speed"
+              onChange={(event) => setSpeed(Number(event.target.value))}
+            >
+              <option value={0.5}>0.5x</option>
+              <option value={1}>1x</option>
+              <option value={2}>2x</option>
+              <option value={4}>4x</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <h3>Movement History</h3>
+      <ul>
+        {items.map((item, itemIndex) => (
+          <li
+            key={`${item.time}-${item.title}`}
+            className={`is-${item.tone}${itemIndex === index ? " is-active" : ""}`}
+            onClick={() => {
+              setPlaying(false);
+              setIndex(itemIndex);
+            }}
+          >
+            <div className="cmd-history-thumb" aria-hidden="true">
+              <HistoryMiniMap path={path} index={itemIndex} compact />
+              <b>{item.time}</b>
+            </div>
+            <div className="cmd-history-body">
+              <strong>{item.title}</strong>
+              <p>{item.place}</p>
+              <small>
+                {item.coords} · {item.source}
+              </small>
+            </div>
+            <Link
+              href={`/explorer?q=${encodeURIComponent(`P-${soldierId}`)}`}
+              className="cmd-event-detail"
+              onClick={(event) => event.stopPropagation()}
+            >
+              View Detail
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function AlertList({ soldierId, items }: { soldierId: string; items: SoldierAlert[] }) {
+  return (
+    <div className="cmd-alerts-panel">
+      <h3>Active Alerts</h3>
+      <ul>
+        {items.map((alert) => (
+          <li key={alert.id} className={`is-${alert.severity.toLowerCase()}`}>
+            <span className={`cmd-alert-type is-${alert.type.toLowerCase().replaceAll(" ", "-")}`}>
+              <AlertTypeIcon type={alert.type} />
+            </span>
+            <div className="cmd-alert-body">
+              <div className="cmd-alert-top">
+                <strong>{alert.type}</strong>
+                <span className={`cmd-sev is-${alert.severity.toLowerCase()}`}>{alert.severity}</span>
+              </div>
+              <p>{alert.details}</p>
+              <small>
+                {alert.time} · {alert.position} · Seen {alert.seen}
+              </small>
+            </div>
+            <Link
+              href={`/explorer?q=${encodeURIComponent(`P-${soldierId}`)}`}
+              className="cmd-event-detail"
+            >
+              View Detail
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function AlertTypeIcon({ type }: { type: SoldierAlert["type"] }) {
+  if (type === "SOS") {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M6.2 9.2a5.8 5.8 0 0 1 11.6 0c0 4.2 1.4 5.6 1.4 5.6H4.8s1.4-1.4 1.4-5.6Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        <path d="M10 18.2a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "Arrhythmia") {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 12h3l2-4 3 8 2-4h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (type === "Low Battery") {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="3.5" y="7.5" width="14" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.7" />
+        <path d="M19.5 10.2v3.6M6.2 12h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "Heat Stress") {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 4v7.2a2.8 2.8 0 1 0 2.2 2.7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        <path d="M12 2.8v1.4M16.5 4.8l-1 1M19 9h-1.4M7.5 4.8l1 1M5 9h1.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "Strap Disconnected") {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M8 8.5 5.2 11.3a4 4 0 0 0 5.5 5.5L13.5 14M16 15.5l2.8-2.8a4 4 0 0 0-5.5-5.5L10.5 10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "Casualty") {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="8" r="3" stroke="currentColor" strokeWidth="1.7" />
+        <path d="M5.5 19.2c.8-3.2 3.2-4.8 6.5-4.8s5.7 1.6 6.5 4.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 18h4.2A11 11 0 0 1 20 8.2M4 14.5h2.8A7.6 7.6 0 0 1 16.8 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function EventList({
+  title,
+  items,
+  soldierId,
+  fill = false,
+}: {
+  title: string;
+  items: SoldierEvent[];
+  soldierId: string;
+  fill?: boolean;
+}) {
+  return (
+    <div className={`cmd-events${fill ? " is-fill" : ""}`}>
       <h3>{title}</h3>
       <ul>
         {items.map((event) => (
           <li key={`${event.time}-${event.text}`}>
             <i style={{ background: event.color }} />
-            <span>{event.time}</span>
-            <span>{event.text}</span>
+            <div className="cmd-event-body">
+              <span className="cmd-event-time">{event.time}</span>
+              <span className="cmd-event-text">{event.text}</span>
+            </div>
+            <Link
+              href={`/explorer?q=${encodeURIComponent(`P-${soldierId}`)}`}
+              className="cmd-event-detail"
+            >
+              View Detail
+            </Link>
           </li>
         ))}
       </ul>
@@ -401,7 +712,7 @@ function EventList({ title, items }: { title: string; items: SoldierEvent[] }) {
 
 export default function DashboardView() {
   const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<Tab>("Overview");
+  const [tab, setTab] = useState<Tab>("History");
   const [selected, setSelected] = useState("104");
   const [cardOpen, setCardOpen] = useState(true);
   const [focus, setFocus] = useState<{
@@ -495,7 +806,7 @@ export default function DashboardView() {
     setSelected(id);
     const item = starterMarkers.find((entry) => entry.id === id);
     setCardOpen(item?.kind === "person");
-    setTab("Overview");
+    setTab("History");
   }
 
   function locate(id: string) {
@@ -538,7 +849,7 @@ export default function DashboardView() {
       <TopHeader query={query} onQueryChange={setQuery} hits={hits} onPick={locate} />
 
       <div className="cmd-body">
-        <section className="cmd-stage" aria-label="Operations map">
+        <section className={`cmd-stage${personOpen ? " has-card" : ""}`} aria-label="Operations map">
           <OpsMap
             markers={starterMarkers}
             showTracks
@@ -572,7 +883,7 @@ export default function DashboardView() {
               </div>
               <div className="cmd-card-main">
                 <div className="cmd-tabs">
-                  {(["Overview", "Vitals", "Equipment", "Track", "Events"] as Tab[]).map((item) => (
+                  {(["History", "Events", "Alerts", "Reports"] as Tab[]).map((item) => (
                     <button key={item} type="button" className={tab === item ? "is-active" : ""} onClick={() => setTab(item)}>
                       {item}
                     </button>
@@ -581,39 +892,44 @@ export default function DashboardView() {
                     ×
                   </button>
                 </div>
-                {tab === "Overview" ? (
-                  <div className="cmd-stats">
-                    {dossier.overview.map((item) => (
-                      <Stat key={item.label} {...item} />
-                    ))}
-                    <EventList title="Recent Events" items={dossier.events} />
-                  </div>
-                ) : null}
-                {tab === "Vitals" ? (
-                  <div className="cmd-stats is-grid">
-                    {dossier.vitals.map((item) => (
-                      <Stat key={item.label} {...item} />
-                    ))}
-                  </div>
-                ) : null}
-                {tab === "Equipment" ? (
-                  <div className="cmd-stats is-grid">
-                    {dossier.gear.map((item) => (
-                      <Stat key={item.label} {...item} />
-                    ))}
-                  </div>
-                ) : null}
-                {tab === "Track" ? (
-                  <div className="cmd-stats is-grid">
-                    <Stat label="Location" value={place} note={dossier.unit} tone="ok" />
-                    {dossier.track.map((item) => (
-                      <Stat key={item.label} {...item} />
-                    ))}
-                  </div>
-                ) : null}
-                {tab === "Events" ? (
-                  <EventList title="Recent Events" items={dossier.events} />
-                ) : null}
+                <div className={`cmd-card-scroll${tab === "Events" || tab === "History" || tab === "Reports" || tab === "Alerts" ? " is-events" : ""}`}>
+                  {tab === "History" ? (
+                    <HistoryList soldierId={marker.label} items={buildHistory(marker.label, marker.position)} />
+                  ) : null}
+                  {tab === "Events" ? (
+                    <EventList title="Recent Events" items={dossier.events} soldierId={marker.label} fill />
+                  ) : null}
+                  {tab === "Alerts" ? (
+                    <AlertList soldierId={marker.label} items={buildAlerts(marker.label, dossier.status)} />
+                  ) : null}
+                  {tab === "Reports" ? (
+                    <div className="cmd-reports">
+                      <h3>Reports</h3>
+                      <ul>
+                        {[
+                          { time: "14:20", title: "Incident summary", note: "SOS + elevated HR window" },
+                          { time: "13:55", title: "Movement report", note: "Last 2 km patrol leg" },
+                          { time: "12:40", title: "Device health", note: "Battery and strap status" },
+                          { time: "11:10", title: "Shift handover", note: "Sector watch notes" },
+                        ].map((report) => (
+                          <li key={`${report.time}-${report.title}`}>
+                            <div className="cmd-report-body">
+                              <strong>{report.title}</strong>
+                              <p>{report.note}</p>
+                              <small>{report.time} · Soldier {marker.label}</small>
+                            </div>
+                            <Link
+                              href={`/explorer?q=${encodeURIComponent(`P-${marker.label}`)}`}
+                              className="cmd-event-detail"
+                            >
+                              View Detail
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </article>
           ) : null}

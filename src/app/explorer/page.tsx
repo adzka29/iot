@@ -8,6 +8,11 @@ export const metadata: Metadata = {
   description: "Incoming packets, decoded fields, and communication metadata.",
 };
 
-export default function ExplorerPage() {
-  return <ExplorerView />;
+export default async function ExplorerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const params = await searchParams;
+  return <ExplorerView initialQuery={params.q ?? ""} />;
 }

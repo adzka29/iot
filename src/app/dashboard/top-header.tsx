@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 
 type Severity = "Critical" | "Warning" | "Info";
@@ -102,29 +102,6 @@ function AlertGlyph({ type }: { type: AlertType }) {
   );
 }
 
-function formatClock(date: Date) {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Jakarta",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).format(date);
-}
-
-function formatDate(date: Date) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Jakarta",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).formatToParts(date);
-  const day = parts.find((part) => part.type === "day")?.value ?? "06";
-  const month = parts.find((part) => part.type === "month")?.value ?? "Oct";
-  const year = parts.find((part) => part.type === "year")?.value ?? "2026";
-  return `${day}-${month}-${year}`;
-}
-
 type TopHeaderProps = {
   query: string;
   onQueryChange: (value: string) => void;
@@ -143,17 +120,9 @@ function Shield() {
 
 export default function TopHeader({ query, onQueryChange, hits = [], onPick }: TopHeaderProps) {
   const router = useRouter();
-  const [now, setNow] = useState<Date | null>(null);
   const [userOpen, setUserOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
-
-  useEffect(() => {
-    const tick = () => setNow(new Date());
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, []);
 
   return (
     <>
@@ -277,16 +246,6 @@ export default function TopHeader({ query, onQueryChange, hits = [], onPick }: T
             </div>
           </div>
         ) : null}
-      </div>
-      <div className="cmd-clock">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.7" />
-          <path d="M12 8v4.2l2.6 1.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-        </svg>
-        <div>
-          <strong>{now ? formatClock(now) : "--:--:--"}</strong>
-          <small>Asia/Jakarta · {now ? formatDate(now) : "06-Oct-2026"}</small>
-        </div>
       </div>
       <div className="cmd-user">
         <button
