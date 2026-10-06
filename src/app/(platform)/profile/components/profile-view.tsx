@@ -18,7 +18,6 @@ import {
 const PHOTO_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 export default function ProfileView() {
-  const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"profile" | "activity">("profile");
   const [editing, setEditing] = useState(false);
   const [user, setUser] = useState<ProfileUser | null>(null);
@@ -161,7 +160,7 @@ export default function ProfileView() {
 
   return (
     <div className="cmd pf">
-      <TopHeader query={query} onQueryChange={setQuery} />
+      <TopHeader />
       <main className="pf-body">
         <header className="pf-head">
           <div className="cmd-page-head">

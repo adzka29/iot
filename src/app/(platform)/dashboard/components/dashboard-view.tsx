@@ -4,6 +4,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import TopHeader from "@/components/TopHeader";
+import { alertTypeLabel, coordLabel, formatAlertDate, formatSeen, listAlerts, severityLabel, type AlertRecord } from "@/lib/alerts";
+import { categoryLabel, entityLabel, listExplorer, recordSummary, type ExplorerRecord } from "@/lib/explorer";
 
 const OpsMap = dynamic(() => import("./ops-map"), { ssr: false });
 const HistoryMiniMap = dynamic(() => import("./history-mini-map"), { ssr: false });
@@ -13,39 +15,12 @@ type Tab = "History" | "Events" | "Alerts" | "Reports";
 type SoldierAlert = {
   id: string;
   time: string;
-  severity: "Critical" | "Warning" | "Info";
-  type: "SOS" | "Casualty" | "Arrhythmia" | "Low Battery" | "Heat Stress" | "Strap Disconnected" | "No Contact";
+  severity: string;
+  type: string;
   details: string;
   position: string;
   seen: string;
 };
-
-function buildAlerts(label: string, status: string): SoldierAlert[] {
-  const base: SoldierAlert[] =
-    status === "SOS"
-      ? [
-          { id: `${label}-sos-1`, time: "14:24", severity: "Critical", type: "SOS", details: "SOS button pressed", position: "GNSS (±8 m)", seen: "4 minutes ago" },
-          { id: `${label}-hr-1`, time: "14:21", severity: "Warning", type: "Arrhythmia", details: "Heart rate elevated (118 bpm)", position: "GNSS (±8 m)", seen: "7 minutes ago" },
-          { id: `${label}-heat-1`, time: "14:05", severity: "Warning", type: "Heat Stress", details: "Body temperature high threshold", position: "GNSS (±9 m)", seen: "23 minutes ago" },
-        ]
-      : status === "Warning"
-        ? [
-            { id: `${label}-bat-1`, time: "14:19", severity: "Warning", type: "Low Battery", details: "Device battery 22%", position: "Mesh (RSSI)", seen: "6 minutes ago" },
-            { id: `${label}-strap-1`, time: "14:14", severity: "Info", type: "Strap Disconnected", details: "Chest strap signal dropping", position: "GNSS (±11 m)", seen: "11 minutes ago" },
-            { id: `${label}-hr-1`, time: "14:08", severity: "Warning", type: "Arrhythmia", details: "Heart rate high (97 bpm)", position: "GNSS (±11 m)", seen: "17 minutes ago" },
-          ]
-        : [
-            { id: `${label}-info-1`, time: "13:48", severity: "Info", type: "No Contact", details: "Brief link delay recovered", position: "GNSS (±6 m)", seen: "36 minutes ago" },
-            { id: `${label}-bat-1`, time: "12:20", severity: "Info", type: "Low Battery", details: "Battery check normal", position: "Mesh (RSSI)", seen: "2 hours ago" },
-          ];
-
-  return [
-    ...base,
-    { id: `${label}-cas-1`, time: "11:40", severity: "Warning", type: "Casualty", details: "No movement detected (algorithm)", position: "GNSS (±14 m)", seen: "3 hours ago" },
-    { id: `${label}-sos-2`, time: "09:12", severity: "Critical", type: "SOS", details: "SOS training ping acknowledged", position: "GNSS (±10 m)", seen: "5 hours ago" },
-    { id: `${label}-strap-2`, time: "08:05", severity: "Info", type: "Strap Disconnected", details: "Chest strap reconnected", position: "GNSS (±7 m)", seen: "6 hours ago" },
-  ];
-}
 
 type Marker = {
   id: string;
@@ -57,33 +32,6 @@ type Marker = {
   status?: string;
   role?: "danru";
 };
-
-type SearchHit = {
-  id: string;
-  title: string;
-  hint: string;
-  position: [number, number];
-  target: "person" | "weapon" | "place";
-  zoom?: number;
-};
-
-const MAP_PLACES: SearchHit[] = [
-  { id: "place-monas", title: "Monas", hint: "Area · Jakarta Pusat", position: [-6.175421, 106.827312], target: "place", zoom: 15 },
-  { id: "place-gambir", title: "Gambir", hint: "Daerah · Jakarta Pusat", position: [-6.1764, 106.8304], target: "place", zoom: 15 },
-  { id: "place-menteng", title: "Menteng", hint: "Daerah · Jakarta Pusat", position: [-6.1944, 106.8294], target: "place", zoom: 15 },
-  { id: "place-senen", title: "Senen", hint: "Daerah · Jakarta Pusat", position: [-6.1769, 106.8415], target: "place", zoom: 15 },
-  { id: "place-cikini", title: "Cikini", hint: "Daerah · Jakarta Pusat", position: [-6.1912, 106.8418], target: "place", zoom: 15 },
-  { id: "place-kemayoran", title: "Kemayoran", hint: "Daerah · Jakarta Pusat", position: [-6.1598, 106.8454], target: "place", zoom: 14 },
-  { id: "place-tanah-abang", title: "Tanah Abang", hint: "Daerah · Jakarta Pusat", position: [-6.1856, 106.8117], target: "place", zoom: 15 },
-  { id: "place-sawah-besar", title: "Sawah Besar", hint: "Daerah · Jakarta Pusat", position: [-6.1608, 106.8275], target: "place", zoom: 15 },
-  { id: "place-johar-baru", title: "Johar Baru", hint: "Daerah · Jakarta Pusat", position: [-6.1833, 106.855], target: "place", zoom: 15 },
-  { id: "place-cempaka-putih", title: "Cempaka Putih", hint: "Daerah · Jakarta Pusat", position: [-6.1815, 106.8683], target: "place", zoom: 15 },
-  { id: "place-kota-tua", title: "Kota Tua", hint: "Area · Jakarta Barat", position: [-6.1352, 106.8133], target: "place", zoom: 15 },
-  { id: "place-ancol", title: "Ancol", hint: "Area · Jakarta Utara", position: [-6.1256, 106.8333], target: "place", zoom: 14 },
-  { id: "place-thamrin", title: "Jalan Thamrin", hint: "Lokasi · Jakarta Pusat", position: [-6.1877, 106.823], target: "place", zoom: 16 },
-  { id: "place-sudirman", title: "Jalan Sudirman", hint: "Lokasi · Jakarta Pusat", position: [-6.2088, 106.8216], target: "place", zoom: 15 },
-  { id: "place-istana", title: "Istana Merdeka", hint: "Lokasi · Jakarta Pusat", position: [-6.1702, 106.824], target: "place", zoom: 16 },
-];
 
 const starterMarkers: Marker[] = [
   { id: "101", label: "101", position: [-6.182, 106.812], tone: "ok", kind: "person", group: "Alpha" },
@@ -589,6 +537,7 @@ function AlertList({ soldierId, items }: { soldierId: string; items: SoldierAler
   return (
     <div className="cmd-alerts-panel">
       <h3>Active Alerts</h3>
+      {items.length ? null : <p className="cmd-feed-note">No alerts for this soldier.</p>}
       <ul>
         {items.map((alert) => (
           <li key={alert.id} className={`is-${alert.severity.toLowerCase()}`}>
@@ -686,6 +635,7 @@ function EventList({
   return (
     <div className={`cmd-events${fill ? " is-fill" : ""}`}>
       <h3>{title}</h3>
+      {items.length ? null : <p className="cmd-feed-note">No explorer records for this soldier.</p>}
       <ul>
         {items.map((event) => (
           <li key={`${event.time}-${event.text}`}>
@@ -707,131 +657,224 @@ function EventList({
   );
 }
 
+type MatchSource = "alerts" | "explorer";
+
+type MatchRow = {
+  key: string;
+  soldierId: string | null;
+  title: string;
+  route: string;
+  detail: string;
+  severity: string;
+  time: string;
+};
+
+function matchClock(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date
+    .toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+    .replaceAll(":", ".");
+}
+
+function alertMatch(alert: AlertRecord): MatchRow {
+  const place = alert.gateway_id ?? alert.position_source ?? "Field";
+  return {
+    key: `alert-${alert.id}`,
+    soldierId: alert.soldier_id == null ? null : String(alert.soldier_id),
+    title: alert.soldier_id == null ? (alert.entity_id ?? "Alert") : `S-${alert.soldier_id}`,
+    route: `${alert.group_id ?? "Ungrouped"} → ${place}`,
+    detail: alert.message || alertTypeLabel(alert.alert_type),
+    severity: severityLabel(alert.severity),
+    time: matchClock(alert.event_time),
+  };
+}
+
+function explorerMatch(record: ExplorerRecord): MatchRow {
+  const place = record.gateway_id ?? record.position_source ?? categoryLabel(record.category);
+  return {
+    key: `log-${record.id}`,
+    soldierId: record.soldier_id == null ? null : String(record.soldier_id),
+    title: record.soldier_id == null ? entityLabel(record) : `S-${record.soldier_id}`,
+    route: `${record.group_id ?? categoryLabel(record.category)} → ${place}`,
+    detail: recordSummary(record),
+    severity: record.severity ? severityLabel(record.severity) : categoryLabel(record.category),
+    time: matchClock(record.event_time),
+  };
+}
+
+function toSoldierAlert(alert: AlertRecord): SoldierAlert {
+  return {
+    id: String(alert.id),
+    time: formatAlertDate(alert.event_time).time,
+    severity: severityLabel(alert.severity),
+    type: alertTypeLabel(alert.alert_type),
+    details: alert.message || alertTypeLabel(alert.alert_type),
+    position: alert.position_source ?? coordLabel(alert),
+    seen: formatSeen(alert.last_seen_at || alert.event_time),
+  };
+}
+
+function toSoldierEvent(record: ExplorerRecord): SoldierEvent {
+  return {
+    color: "#60a5fa",
+    time: matchClock(record.event_time).slice(0, 5).replace(".", ":"),
+    text: `${categoryLabel(record.category)} · ${recordSummary(record)}`,
+  };
+}
+
+function RecentMatches({ onSelect }: { onSelect: (id: string, source: MatchSource) => void }) {
+  const [open, setOpen] = useState(true);
+  const [source, setSource] = useState<MatchSource>("alerts");
+  const [rows, setRows] = useState<MatchRow[]>([]);
+  const [note, setNote] = useState("Loading alerts");
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setNote(source === "alerts" ? "Loading alerts" : "Loading explorer log");
+    setRows([]);
+    const load =
+      source === "alerts"
+        ? listAlerts({ limit: 12 }, controller.signal).then((list) => list.items.map(alertMatch))
+        : listExplorer({ limit: 12 }, controller.signal).then((list) => list.items.map(explorerMatch));
+    load
+      .then((items) => {
+        if (controller.signal.aborted) return;
+        setRows(items);
+        setNote(items.length ? "" : "No records");
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setRows([]);
+        setNote(reason instanceof Error ? reason.message : "Couldn't load records");
+      });
+    return () => controller.abort();
+  }, [open, source]);
+
+  if (!open) {
+    return (
+      <button type="button" className="cmd-matches is-collapsed" onClick={() => setOpen(true)}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M14 10 4 4m0 0v6m0-6h6M10 14l10 10m0 0v-6m0 6h-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <strong>Recent Matches</strong>
+      </button>
+    );
+  }
+
+  return (
+    <aside className="cmd-matches" aria-label="Recent matches">
+      <div className="cmd-matches-head">
+        <div>
+          <strong>Recent Matches</strong>
+          <small>{source === "alerts" ? "From alerts" : "From explorer log"}</small>
+        </div>
+        <div className="cmd-matches-tools">
+          <span className="cmd-live">Live</span>
+          <button type="button" className="cmd-matches-x" aria-label="Close recent matches" onClick={() => setOpen(false)}>
+            ×
+          </button>
+        </div>
+      </div>
+      <div className="cmd-matches-source" role="tablist" aria-label="Match source">
+        <button type="button" role="tab" aria-selected={source === "alerts"} className={source === "alerts" ? "is-active" : ""} onClick={() => setSource("alerts")}>
+          Alerts
+        </button>
+        <button type="button" role="tab" aria-selected={source === "explorer"} className={source === "explorer" ? "is-active" : ""} onClick={() => setSource("explorer")}>
+          Explorer
+        </button>
+      </div>
+      <div className="cmd-matches-list">
+        {note ? <p className="cmd-matches-note">{note}</p> : null}
+        {rows.map((match) => (
+          <button
+            key={match.key}
+            type="button"
+            className="cmd-match"
+            onClick={() => {
+              if (match.soldierId && starterMarkers.some((marker) => marker.id === match.soldierId)) {
+                onSelect(match.soldierId, source);
+              }
+            }}
+          >
+            <b>{match.title}</b>
+            <p>{match.route}</p>
+            <p>{match.detail}</p>
+            <span className="cmd-match-foot">
+              <em className={`is-${match.severity.toLowerCase()}`}>{match.severity}</em>
+              <time>{match.time}</time>
+            </span>
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+function KillChainBar() {
+  const stages = [
+    { label: "Chest Strap", status: "Connected" },
+    { label: "Shoulder Hub", status: "Active" },
+    { label: "LoRa Mesh", status: "Healthy" },
+    { label: "Gateway Node", status: "Online" },
+    { label: "Satellite", status: "Available" },
+  ];
+
+  return (
+    <aside className="cmd-chain" aria-label="System communication chain">
+      <div className="cmd-chain-lead">
+        <strong>System Communication Chain</strong>
+      </div>
+      <ol className="cmd-chain-flow">
+        {stages.map((stage) => (
+          <li key={stage.label}>
+            <em>{stage.label}</em>
+            <span>
+              <i />
+              {stage.status}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </aside>
+  );
+}
+
 export default function DashboardView() {
-  const [query, setQuery] = useState("");
   const [tab, setTab] = useState<Tab>("History");
   const [selected, setSelected] = useState("104");
   const [cardOpen, setCardOpen] = useState(true);
-  const [focus, setFocus] = useState<{
-    nonce: number;
-    id: string;
-    position: [number, number];
-    kind: Marker["kind"] | "place";
-    zoom?: number;
-  } | null>(null);
-  const [geoHits, setGeoHits] = useState<SearchHit[]>([]);
+  const [liveAlerts, setLiveAlerts] = useState<SoldierAlert[]>([]);
+  const [liveEvents, setLiveEvents] = useState<SoldierEvent[]>([]);
 
-  useEffect(() => {
-    const text = query.trim();
-    if (text.length < 3) {
-      setGeoHits([]);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      fetch(`/api/geocode?q=${encodeURIComponent(text)}`)
-        .then((response) => (response.ok ? response.json() : []))
-        .then((rows: SearchHit[]) => setGeoHits(Array.isArray(rows) ? rows : []))
-        .catch(() => setGeoHits([]));
-    }, 320);
-    return () => window.clearTimeout(timer);
-  }, [query]);
-
-  const hits = useMemo(() => {
-    const text = query.trim().toLowerCase();
-    if (!text) return [];
-
-    const coord = text.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
-    const coordHit: SearchHit[] = coord
-      ? [
-          {
-            id: `coord-${coord[1]}-${coord[2]}`,
-            title: `${coord[1]}, ${coord[2]}`,
-            hint: "Coordinates",
-            position: [Number(coord[1]), Number(coord[2])],
-            target: "place",
-            zoom: 16,
-          },
-        ]
-      : [];
-
-    const people = starterMarkers.flatMap((marker) => {
-      const dossier = dossiers[marker.id];
-      const title = marker.kind === "person" ? `S-${marker.label}` : marker.label;
-      const haystack = [
-        title,
-        marker.id,
-        marker.kind,
-        marker.group,
-        marker.status,
-        marker.role,
-        dossier?.unit,
-        dossier?.status,
-        marker.kind === "person" ? "personnel soldier" : "weapon",
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(text)) return [];
-      const hint = [
-        marker.role === "danru" ? "DANRU" : marker.kind === "weapon" ? "Weapon" : "Personnel",
-        marker.group,
-        marker.status,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      return [
-        {
-          id: marker.id,
-          title,
-          hint,
-          position: marker.position,
-          target: marker.kind === "weapon" ? "weapon" : "person",
-        } satisfies SearchHit,
-      ];
-    });
-
-    const areas = MAP_PLACES.filter((place) =>
-      `${place.title} ${place.hint}`.toLowerCase().includes(text),
-    );
-
-    const seen = new Set([...people, ...areas, ...coordHit].map((hit) => hit.title.toLowerCase()));
-    const remote = geoHits.filter((hit) => !seen.has(hit.title.toLowerCase()));
-    return [...coordHit, ...people, ...areas, ...remote].slice(0, 10);
-  }, [query, geoHits]);
-
-  function choose(id: string) {
+  function choose(id: string, source?: MatchSource) {
     setSelected(id);
     const item = starterMarkers.find((entry) => entry.id === id);
     setCardOpen(item?.kind === "person");
-    setTab("History");
+    setTab(source === "explorer" ? "Events" : source === "alerts" ? "Alerts" : "History");
   }
 
-  function locate(id: string) {
-    const hit = hits.find((item) => item.id === id);
-    if (hit?.target === "place") {
-      setCardOpen(false);
-      setFocus({
-        nonce: Date.now(),
-        id: hit.id,
-        position: hit.position,
-        kind: "place",
-        zoom: hit.zoom ?? 15,
+  useEffect(() => {
+    const soldierId = Number(selected);
+    if (!Number.isFinite(soldierId)) return;
+    const controller = new AbortController();
+    Promise.all([
+      listAlerts({ soldier_id: soldierId, limit: 20 }, controller.signal),
+      listExplorer({ soldier_id: soldierId, limit: 20 }, controller.signal),
+    ])
+      .then(([alerts, logs]) => {
+        if (controller.signal.aborted) return;
+        setLiveAlerts(alerts.items.map(toSoldierAlert));
+        setLiveEvents(logs.items.map(toSoldierEvent));
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setLiveAlerts([]);
+        setLiveEvents([]);
       });
-      setQuery("");
-      return;
-    }
-    const item = starterMarkers.find((entry) => entry.id === id);
-    if (!item) return;
-    choose(id);
-    setFocus({
-      nonce: Date.now(),
-      id: item.id,
-      position: item.position,
-      kind: item.kind,
-      zoom: 16,
-    });
-    setQuery("");
-  }
+    return () => controller.abort();
+  }, [selected]);
 
   const marker = starterMarkers.find((item) => item.id === selected) ?? starterMarkers[2];
   const dossier = dossiers[marker.id] ?? dossiers["104"];
@@ -843,8 +886,7 @@ export default function DashboardView() {
 
   return (
     <div className="cmd">
-      <TopHeader query={query} onQueryChange={setQuery} hits={hits} onPick={locate} />
-
+      <TopHeader />
       <div className="cmd-body">
         <section className={`cmd-stage${personOpen ? " has-card" : ""}`} aria-label="Operations map">
           <div className="cmd-map-slot">
@@ -853,10 +895,11 @@ export default function DashboardView() {
               showTracks
               selected={selected}
               cardOpen={personOpen}
-              focus={focus}
               onSelect={(id) => choose(id)}
               onViewChange={onViewChange}
             />
+            <RecentMatches onSelect={choose} />
+            <KillChainBar />
           </div>
 
           {personOpen ? (
@@ -896,10 +939,10 @@ export default function DashboardView() {
                     <HistoryList soldierId={marker.label} items={buildHistory(marker.label, marker.position)} />
                   ) : null}
                   {tab === "Events" ? (
-                    <EventList title="Recent Events" items={dossier.events} soldierId={marker.label} fill />
+                    <EventList title="Explorer log" items={liveEvents} soldierId={marker.label} fill />
                   ) : null}
                   {tab === "Alerts" ? (
-                    <AlertList soldierId={marker.label} items={buildAlerts(marker.label, dossier.status)} />
+                    <AlertList soldierId={marker.label} items={liveAlerts} />
                   ) : null}
                   {tab === "Reports" ? (
                     <div className="cmd-reports">

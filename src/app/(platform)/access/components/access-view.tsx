@@ -43,7 +43,6 @@ const EMPTY_USER = { name: "", username: "", email: "", password: "", department
 const EMPTY_ROLE = { name: "", duty_category: "", description: "", privilege_narrative: "", least_privilege_baseline: "" };
 
 export default function AccessView() {
-  const [query, setQuery] = useState("");
   const [tab, setTab] = useState<Tab>("Identity Registry");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -260,7 +259,7 @@ export default function AccessView() {
 
   return (
     <div className="cmd ua">
-      <TopHeader query={query} onQueryChange={setQuery} />
+      <TopHeader />
       <main className="ua-body">
         <header className="ua-head">
           <div className="cmd-page-head">

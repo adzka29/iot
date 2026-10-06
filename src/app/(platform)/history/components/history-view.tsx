@@ -75,7 +75,6 @@ function buildStops(soldierId: string): HistoryStop[] {
 }
 
 export default function HistoryView({ initialSoldier = "104" }: { initialSoldier?: string }) {
-  const [query, setQuery] = useState("");
   const [viewBy, setViewBy] = useState<ViewBy>("Soldier");
   const [soldier, setSoldier] = useState(SOLDIERS.includes(initialSoldier) ? initialSoldier : "104");
   const [range, setRange] = useState<"all" | "30d">("all");
@@ -151,7 +150,7 @@ export default function HistoryView({ initialSoldier = "104" }: { initialSoldier
 
   return (
     <div className="cmd hs">
-      <TopHeader query={query} onQueryChange={setQuery} />
+      <TopHeader />
       <main className="hs-body">
         <aside className="hs-filters">
           <div className="hs-filter-head">

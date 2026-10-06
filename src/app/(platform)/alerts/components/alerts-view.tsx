@@ -114,7 +114,6 @@ export default function AlertsView({
     const value = Number(initialSoldier);
     return Number.isFinite(value) && value > 0 ? value : undefined;
   });
-  const [query, setQuery] = useState("");
   const [searchText, setSearchText] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [range, setRange] = useState("all");
@@ -328,7 +327,7 @@ export default function AlertsView({
 
   return (
     <div className="cmd al">
-      <TopHeader query={query} onQueryChange={setQuery} />
+      <TopHeader />
       <main className={`al-body${sos.length ? " has-sos" : ""}`}>
         <header className="al-head">
           <div className="cmd-page-head">

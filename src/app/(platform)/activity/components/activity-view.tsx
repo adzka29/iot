@@ -29,7 +29,6 @@ const OUTCOMES = [
 ];
 
 export default function ActivityView() {
-  const [query, setQuery] = useState("");
   const [actorQuery, setActorQuery] = useState("");
   const [tableQuery, setTableQuery] = useState("");
   const [debouncedActor, setDebouncedActor] = useState("");
@@ -179,7 +178,7 @@ export default function ActivityView() {
 
   return (
     <div className="cmd act">
-      <TopHeader query={query} onQueryChange={setQuery} />
+      <TopHeader />
       <main className="act-body">
         <header className="act-head">
           <div className="cmd-page-head">

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import Link from "next/link";
 import type { Map as LeafletMap } from "leaflet";
-import { divIcon } from "leaflet";
+import { Map as LeafletMapClass, divIcon } from "leaflet";
+import { LeafletContext, createLeafletContext } from "@react-leaflet/core";
 import {
-  MapContainer,
   Marker,
   Polygon,
   Polyline,
@@ -203,6 +203,51 @@ function DrawGeofence({
   return null;
 }
 
+function OpsMapCanvas({
+  mapRef,
+  children,
+}: {
+  mapRef: RefObject<LeafletMap | null>;
+  children: ReactNode;
+}) {
+  const nodeRef = useRef<HTMLDivElement>(null);
+  const [context, setContext] = useState<ReturnType<typeof createLeafletContext> | null>(null);
+
+  useEffect(() => {
+    const node = nodeRef.current;
+    if (!node) return;
+    let map: LeafletMap | null = null;
+    let cancelled = false;
+    const frame = window.requestAnimationFrame(() => {
+      if (cancelled || !node.isConnected) return;
+      const created = new LeafletMapClass(node, {
+        center: MAP_CENTER,
+        zoom: MAP_ZOOM,
+        minZoom: 3,
+        maxZoom: 19,
+        zoomControl: false,
+        attributionControl: false,
+      });
+      map = created;
+      mapRef.current = created;
+      setContext(createLeafletContext(created));
+    });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+      map?.remove();
+      mapRef.current = null;
+      setContext(null);
+    };
+  }, [mapRef]);
+
+  return (
+    <div ref={nodeRef} className="cmd-leaflet">
+      {context ? <LeafletContext value={context}>{children}</LeafletContext> : null}
+    </div>
+  );
+}
+
 export default function OpsMap({
   markers,
   showTracks,
@@ -334,15 +379,7 @@ export default function OpsMap({
           <feComposite in="oceanOnly" in2="land" operator="over" />
         </filter>
       </svg>
-      <MapContainer
-        ref={mapRef}
-        center={MAP_CENTER}
-        zoom={MAP_ZOOM}
-        minZoom={3}
-        maxZoom={19}
-        zoomControl={false}
-        attributionControl={false}
-      >
+      <OpsMapCanvas mapRef={mapRef}>
         <TileLayer url={NIGHT_TILES} className="cmd-tiles-night" maxZoom={19} />
         <ZoomSync onZoom={setZoom} />
         <FlyToFocus focus={focus} />
@@ -402,12 +439,10 @@ export default function OpsMap({
             eventHandlers={{ click: () => onSelect(marker.id) }}
           />
         ))}
-      </MapContainer>
-      <div className="cmd-zoom" role="group" aria-label="Map zoom">
+      </OpsMapCanvas>
+      <div className="cmd-rail" role="group" aria-label="Map tools">
         <button type="button" aria-label="Zoom in" disabled={zoom >= 19} onClick={() => mapRef.current?.zoomIn()}>+</button>
         <button type="button" aria-label="Zoom out" disabled={zoom <= 3} onClick={() => mapRef.current?.zoomOut()}>−</button>
-      </div>
-      <div className="cmd-rail">
         <div className="cmd-geo">
           <button
             type="button"

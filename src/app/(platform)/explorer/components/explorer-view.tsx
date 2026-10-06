@@ -70,7 +70,6 @@ function rangeLabel(value: string) {
 }
 
 export default function ExplorerView({ initialQuery = "" }: { initialQuery?: string }) {
-  const [query, setQuery] = useState("");
   const [recordQuery, setRecordQuery] = useState(initialQuery);
   const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
   const [entityType, setEntityType] = useState("");
@@ -212,7 +211,7 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
 
   return (
     <div className="cmd ex">
-      <TopHeader query={query} onQueryChange={setQuery} />
+      <TopHeader />
       <main className="ex-body">
         <header className="ex-head">
           <div className="cmd-page-head">
