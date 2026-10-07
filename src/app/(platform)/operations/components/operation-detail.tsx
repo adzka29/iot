@@ -413,19 +413,35 @@ export default function OperationDetail({ operationId, onBack, onChanged }: Oper
           <section className="op-panel">
             <h2>Geofences · {areaKm2} km²</h2>
             <ul className="op-fence-cards">
-              {fences.map((fence) => (
+              {(fences.length ? fences : detail.geofences.map((fence) => ({
+                id: String(fence.id),
+                name: fence.name,
+                kind: (fence.kind === "restricted" || fence.kind === "safe" ? fence.kind : "recon") as OpGeofence["kind"],
+                color: fence.color || "#60a5fa",
+                areaKm2: fence.area_km2 ?? 0,
+                points: [] as [number, number][],
+                existingId: fence.id,
+              }))).map((fence) => (
                 <li key={fence.id}>
                   <i style={{ background: fence.color }} />
                   <div>
                     <strong>{fence.name}</strong>
                     <span>
-                      {fence.areaKm2} km² · {fence.kind}
+                      {fence.areaKm2 || "—"} km² · {fence.kind}
+                      {fence.points.length < 3 ? " · polygon missing" : ""}
                     </span>
                   </div>
                 </li>
               ))}
-              {fences.length === 0 ? <li className="op-empty">No geofences on map.</li> : null}
+              {!fences.length && !detail.geofences.length ? (
+                <li className="op-empty">No geofences on map.</li>
+              ) : null}
             </ul>
+            {detail.geofences.length > 0 && fences.length === 0 ? (
+              <p className="op-empty">
+                Zones are linked but polygon points didn&apos;t load — check Map tab after refresh, or recreate the zone.
+              </p>
+            ) : null}
           </section>
         </div>
       ) : null}

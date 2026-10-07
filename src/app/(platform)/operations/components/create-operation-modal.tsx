@@ -15,14 +15,12 @@ import {
   estimatePolygonAreaKm2,
   formatOpRange,
   mapSoldierMarkers,
-  operationGroupOptions,
   operationPersonnelOptions,
   resolveAssignments,
   toOpPerson,
   typeLabel,
   type DrawMode,
   type FenceKind,
-  type GroupRef,
   type OpGeofence,
   type OpPerson,
   type OperationDraft,
@@ -94,9 +92,6 @@ export default function CreateOperationModal({
   const [selectedFenceId, setSelectedFenceId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [peopleNote, setPeopleNote] = useState("");
-  const [existingGroups, setExistingGroups] = useState<GroupRef[]>([]);
-  const [linkGroupId, setLinkGroupId] = useState<number | "">("");
-  const [linkGroupQuery, setLinkGroupQuery] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -115,25 +110,21 @@ export default function CreateOperationModal({
     setNewFenceName("New Zone");
     setNewFenceKind("recon");
     setSelectedFenceId(null);
-    setLinkGroupId("");
-    setLinkGroupQuery("");
     setPeopleNote("Loading personnel from map…");
     const controller = new AbortController();
-    // Same TELEMETRY pins as the main map, plus Settings personnel/groups when available.
+    // Same TELEMETRY pins as the main map, plus Settings personnel when available.
     Promise.all([
       operationPersonnelOptions("", controller.signal).catch(() => ({ items: [] as PersonnelChoice[] })),
-      operationGroupOptions(controller.signal).catch(() => ({ items: [] as GroupRef[] })),
       listExplorer(
         { category: "TELEMETRY", timeRange: "30d", limit: 150 },
         controller.signal,
       ).catch(() => ({ items: [] })),
     ])
-      .then(([personnel, groups, explorer]) => {
+      .then(([personnel, explorer]) => {
         if (controller.signal.aborted) return;
         const pins = latestPinsFromExplorer(explorer.items ?? []);
         const merged = mergePersonnelOptions(personnel.items, pins);
         setPeople(merged);
-        setExistingGroups(groups.items);
         setPeopleNote(
           merged.length
             ? ""
@@ -143,7 +134,6 @@ export default function CreateOperationModal({
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
         setPeople([]);
-        setExistingGroups([]);
         setPeopleNote(reason instanceof Error ? reason.message : "Couldn't load personnel");
       });
     return () => controller.abort();
@@ -260,46 +250,6 @@ export default function CreateOperationModal({
     });
   }
 
-  const linkedExistingIds = new Set(
-    draft.assignments.map((a) => a.existingGroupId).filter((id): id is number => id != null),
-  );
-  const linkableGroups = existingGroups.filter((g) => !linkedExistingIds.has(g.id));
-  const linkQuery = linkGroupQuery.trim().toLowerCase();
-  const linkSuggestions = linkableGroups.filter((g) =>
-    !linkQuery ? true : g.name.toLowerCase().includes(linkQuery),
-  );
-  const linkMatch =
-    (linkGroupId !== ""
-      ? linkableGroups.find((item) => item.id === linkGroupId)
-      : undefined) ??
-    (linkQuery
-      ? linkableGroups.find((item) => item.name.toLowerCase() === linkQuery)
-      : undefined);
-
-  function linkExistingGroup() {
-    if (!linkMatch) return;
-    const group = linkMatch;
-    setDraft((current) => {
-      const nextAssignments = [
-        ...current.assignments,
-        {
-          groupId: `existing-${group.id}`,
-          groupName: group.name,
-          personIds: [],
-          leaderId: group.leader_soldier_id != null ? String(group.leader_soldier_id) : null,
-          existingGroupId: group.id,
-        },
-      ];
-      return {
-        ...current,
-        assignments: nextAssignments,
-        groupIds: nextAssignments.map((a) => a.groupId),
-      };
-    });
-    setLinkGroupId("");
-    setLinkGroupQuery("");
-  }
-
   function removeDraftFence(id: string) {
     setDraft((current) => ({
       ...current,
@@ -308,53 +258,69 @@ export default function CreateOperationModal({
     if (selectedFenceId === id) setSelectedFenceId(null);
   }
 
+  function buildPendingFence(): OpGeofence | null {
+    if (drawMode === "polygon" && draftPoints.length >= 3) {
+      const points = [...draftPoints] as [number, number][];
+      return {
+        id: `gf-new-${Date.now().toString(36)}`,
+        name: newFenceName.trim() || "New Zone",
+        kind: newFenceKind,
+        color: FENCE_COLORS[newFenceKind],
+        areaKm2: estimatePolygonAreaKm2(points),
+        points,
+      };
+    }
+    if (drawMode === "circle" && circleCenter) {
+      const points = circleToPolygon(circleCenter, 400);
+      return {
+        id: `gf-new-${Date.now().toString(36)}`,
+        name: newFenceName.trim() || "New Zone",
+        kind: newFenceKind,
+        color: FENCE_COLORS[newFenceKind],
+        areaKm2: estimatePolygonAreaKm2(points),
+        points,
+      };
+    }
+    return null;
+  }
+
+  function clearDrawState(selectedId?: string | null) {
+    setDraftPoints([]);
+    setCircleCenter(null);
+    setDrawMode("none");
+    if (selectedId !== undefined) setSelectedFenceId(selectedId);
+  }
+
   function finishPolygon() {
-    if (draftPoints.length < 3) {
-      setDraftPoints([]);
-      setDrawMode("none");
+    const fence = drawMode === "polygon" ? buildPendingFence() : null;
+    if (!fence) {
+      clearDrawState(null);
       return;
     }
-    const areaKm2 = estimatePolygonAreaKm2(draftPoints);
-    const fence: OpGeofence = {
-      id: `gf-new-${Date.now().toString(36)}`,
-      name: newFenceName.trim() || "New Zone",
-      kind: newFenceKind,
-      color: FENCE_COLORS[newFenceKind],
-      areaKm2,
-      points: [...draftPoints],
-    };
     setDraft((current) => ({ ...current, geofences: [...current.geofences, fence] }));
-    setDraftPoints([]);
-    setDrawMode("none");
-    setSelectedFenceId(fence.id);
+    clearDrawState(fence.id);
   }
 
   function saveCircle() {
-    if (!circleCenter) return;
-    const points = circleToPolygon(circleCenter, 400);
-    const areaKm2 = estimatePolygonAreaKm2(points);
-    const fence: OpGeofence = {
-      id: `gf-new-${Date.now().toString(36)}`,
-      name: newFenceName.trim() || "New Zone",
-      kind: newFenceKind,
-      color: FENCE_COLORS[newFenceKind],
-      areaKm2,
-      points,
-    };
+    const fence = drawMode === "circle" ? buildPendingFence() : null;
+    if (!fence) return;
     setDraft((current) => ({ ...current, geofences: [...current.geofences, fence] }));
-    setCircleCenter(null);
-    setDrawMode("none");
-    setSelectedFenceId(fence.id);
+    clearDrawState(fence.id);
+  }
+
+  /** Commit in-progress draw so Next/Create don't drop unsaved zones. */
+  function withFlushedDraft(): OperationDraft {
+    const pending = buildPendingFence();
+    if (!pending) return draft;
+    const next = { ...draft, geofences: [...draft.geofences, pending] };
+    setDraft(next);
+    clearDrawState(pending.id);
+    return next;
   }
 
   function canNext() {
     if (step === 1) return draft.name.trim().length > 0 && !!draft.startAt && !!draft.endAt;
-    if (step === 2) {
-      return (
-        draft.assignments.some((a) => a.existingGroupId != null) ||
-        assignmentPersonCount(draft.assignments) > 0
-      );
-    }
+    if (step === 2) return assignmentPersonCount(draft.assignments) > 0;
     if (step === 3) return true;
     return true;
   }
@@ -447,30 +413,146 @@ export default function CreateOperationModal({
             ) : null}
 
             {step === 2 ? (
-              <div className="op-assign is-stack">
-                <section className="op-assign-map-pane">
-                  <div className="op-assign-head">
-                    <div>
-                      <h4>Map personnel</h4>
-                      <small>Same soldiers as the main map (last TELEMETRY position)</small>
+              <div className="op-assign is-groups-first">
+                <section className="op-assign-actions op-assign-top-actions">
+                  <div className="op-create-group-box">
+                    <div className="op-create-group-title">Create group from selection</div>
+                    {pickedPeople.length > 0 ? (
+                      <div className="op-picked-chips">
+                        {pickedPeople.map((id) => {
+                          const person = people.find((item) => item.id === id);
+                          return (
+                            <span key={id} className="op-picked-chip">
+                              {person?.label ?? id}
+                              <button
+                                type="button"
+                                onClick={() => togglePickPerson(id)}
+                                aria-label={`Remove ${person?.label ?? id}`}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="op-empty">Select members on the list or map first.</p>
+                    )}
+                    <div className="op-assign-target">
+                      <label>
+                        <span>Group name</span>
+                        <input
+                          value={newGroupName}
+                          onChange={(e) => setNewGroupName(e.target.value)}
+                          placeholder={`e.g. Patrol Team ${draft.assignments.length + 1}`}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="op-btn is-primary is-compact"
+                        disabled={!pickedPeople.length}
+                        onClick={createGroupFromPicked}
+                      >
+                        Create group
+                      </button>
                     </div>
-                    <span className="op-assign-count">{pickedPeople.length} selected</span>
                   </div>
-                  <div className="op-assign-map">
-                    <OperationsMap
-                      fences={[]}
-                      markers={assignMarkers}
-                      selectedMarkerIds={pickedPeople}
-                      onSelectMarker={togglePickPerson}
-                      interactive={false}
-                    />
+
+                  <div className="op-assign-panel is-groups">
+                    <div className="op-assign-head">
+                      <h4>Groups created</h4>
+                      <small>{assignmentPersonCount(draft.assignments)} personnel</small>
+                    </div>
+                    {draft.assignments.length === 0 ? (
+                      <p className="op-empty">Select members and create a group.</p>
+                    ) : (
+                      <ul className="op-built-groups">
+                        {draft.assignments.map((assignment) => {
+                          const resolved = builtGroups.find((item) => item.group.id === assignment.groupId);
+                          const members = resolved?.members ?? [];
+                          const leader = resolved?.leader ?? null;
+                          return (
+                            <li key={assignment.groupId} className="op-built-group">
+                              <div className="op-built-group-head">
+                                <strong>
+                                  {assignment.groupName}
+                                  {assignment.existingGroupId != null ? (
+                                    <em className="op-pill is-active"> existing</em>
+                                  ) : null}
+                                </strong>
+                                <button type="button" onClick={() => clearGroup(assignment.groupId)}>
+                                  Clear
+                                </button>
+                              </div>
+                              <small>
+                                {assignment.existingGroupId != null
+                                  ? `Settings group #${assignment.existingGroupId}`
+                                  : `Leader ${leader?.label ?? (assignment.leaderId ? `S-${assignment.leaderId}` : "—")} · ${members.length || assignment.personIds.length} personnel`}
+                              </small>
+                              {assignment.existingGroupId == null ? (
+                                <ul className="op-built-members">
+                                  {members.map((person) => (
+                                    <li key={person.id}>
+                                      <span className="op-built-member-id">
+                                        <strong>{person.label}</strong>
+                                        <em>{person.name}</em>
+                                      </span>
+                                      <div className="op-built-member-actions">
+                                        {leader?.id === person.id ? (
+                                          <span className="op-pill is-deployed">Leader</span>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => setGroupLeader(assignment.groupId, person.id)}
+                                          >
+                                            Make leader
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => removePersonFromGroup(assignment.groupId, person.id)}
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                   </div>
                 </section>
 
                 <section className="op-assign-bottom">
-                  <div className="op-assign-panel">
+                  <div className="op-assign-map-pane">
                     <div className="op-assign-head">
-                      <h4>Select members</h4>
+                      <div>
+                        <h4>Map</h4>
+                        <small>Tap pins to select</small>
+                      </div>
+                    </div>
+                    <div className="op-assign-map">
+                      <OperationsMap
+                        fences={[]}
+                        markers={assignMarkers}
+                        selectedMarkerIds={pickedPeople}
+                        onSelectMarker={togglePickPerson}
+                        interactive={false}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="op-assign-panel op-assign-members">
+                    <div className="op-assign-head">
+                      <div>
+                        <h4>Select members</h4>
+                        <small>Same soldiers as the main map</small>
+                      </div>
+                      <span className="op-assign-count">{pickedPeople.length} selected</span>
                     </div>
                     <div className="op-search op-search-inline">
                       <svg className="op-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -514,182 +596,6 @@ export default function CreateOperationModal({
                         </li>
                       ) : null}
                     </ul>
-                  </div>
-
-                  <div className="op-assign-actions">
-                  <div className="op-create-group-box">
-                    <div className="op-create-group-title">Link existing group</div>
-                    <div className="op-assign-target">
-                      <label>
-                        <span>Type group name (from Settings)</span>
-                        <input
-                          list="op-link-group-options"
-                          value={linkGroupQuery}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setLinkGroupQuery(value);
-                            const exact = linkableGroups.find(
-                              (g) => g.name.toLowerCase() === value.trim().toLowerCase(),
-                            );
-                            setLinkGroupId(exact ? exact.id : "");
-                          }}
-                          placeholder="e.g. Alpha Squad"
-                          autoComplete="off"
-                        />
-                        <datalist id="op-link-group-options">
-                          {linkableGroups.map((group) => (
-                            <option
-                              key={group.id}
-                              value={group.name}
-                              label={`${group.personnel_count} personnel`}
-                            />
-                          ))}
-                        </datalist>
-                      </label>
-                      <button
-                        type="button"
-                        className="op-btn is-ghost is-compact"
-                        disabled={!linkMatch}
-                        onClick={linkExistingGroup}
-                      >
-                        Link group
-                      </button>
-                    </div>
-                    {linkGroupQuery.trim() && !linkMatch && linkSuggestions.length > 0 ? (
-                      <ul className="op-link-suggestions">
-                        {linkSuggestions.slice(0, 6).map((group) => (
-                          <li key={group.id}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLinkGroupQuery(group.name);
-                                setLinkGroupId(group.id);
-                              }}
-                            >
-                              <strong>{group.name}</strong>
-                              <small>{group.personnel_count} personnel</small>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {!linkableGroups.length ? (
-                      <p className="op-empty">No ACTIVE Settings groups to link (or all already linked).</p>
-                    ) : linkGroupQuery.trim() && !linkMatch ? (
-                      <p className="op-empty">No matching group — pick a suggestion or type the exact name.</p>
-                    ) : null}
-                  </div>
-
-                  <div className="op-create-group-box">
-                    <div className="op-create-group-title">Create group from selection</div>
-                    {pickedPeople.length > 0 ? (
-                      <div className="op-picked-chips">
-                        {pickedPeople.map((id) => {
-                          const person = people.find((item) => item.id === id);
-                          return (
-                            <span key={id} className="op-picked-chip">
-                              {person?.label ?? id}
-                              <button
-                                type="button"
-                                onClick={() => togglePickPerson(id)}
-                                aria-label={`Remove ${person?.label ?? id}`}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="op-empty">Select members on the map or list first.</p>
-                    )}
-                    <div className="op-assign-target">
-                      <label>
-                        <span>Group name</span>
-                        <input
-                          value={newGroupName}
-                          onChange={(e) => setNewGroupName(e.target.value)}
-                          placeholder={`e.g. Patrol Team ${draft.assignments.length + 1}`}
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        className="op-btn is-primary is-compact"
-                        disabled={!pickedPeople.length}
-                        onClick={createGroupFromPicked}
-                      >
-                        Create group
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="op-assign-panel is-groups">
-                    <div className="op-assign-head">
-                      <h4>Groups created</h4>
-                      <small>{assignmentPersonCount(draft.assignments)} personnel</small>
-                    </div>
-                    {draft.assignments.length === 0 ? (
-                      <p className="op-empty">Link an existing group or create one from members.</p>
-                    ) : (
-                      <ul className="op-built-groups">
-                        {draft.assignments.map((assignment) => {
-                          const resolved = builtGroups.find((item) => item.group.id === assignment.groupId);
-                          const members = resolved?.members ?? [];
-                          const leader = resolved?.leader ?? null;
-                          return (
-                          <li key={assignment.groupId} className="op-built-group">
-                            <div className="op-built-group-head">
-                              <strong>
-                                {assignment.groupName}
-                                {assignment.existingGroupId != null ? (
-                                  <em className="op-pill is-active"> existing</em>
-                                ) : null}
-                              </strong>
-                              <button type="button" onClick={() => clearGroup(assignment.groupId)}>
-                                Clear
-                              </button>
-                            </div>
-                            <small>
-                              {assignment.existingGroupId != null
-                                ? `Settings group #${assignment.existingGroupId}`
-                                : `Leader ${leader?.label ?? (assignment.leaderId ? `S-${assignment.leaderId}` : "—")} · ${members.length || assignment.personIds.length} personnel`}
-                            </small>
-                            {assignment.existingGroupId == null ? (
-                              <ul className="op-built-members">
-                                {members.map((person) => (
-                                  <li key={person.id}>
-                                    <span>
-                                      <strong>{person.label}</strong>
-                                      <em>{person.name}</em>
-                                    </span>
-                                    <div className="op-built-member-actions">
-                                      {leader?.id === person.id ? (
-                                        <span className="op-pill is-deployed">Leader</span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={() => setGroupLeader(assignment.groupId, person.id)}
-                                        >
-                                          Make leader
-                                        </button>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => removePersonFromGroup(assignment.groupId, person.id)}
-                                      >
-                                        Remove
-                                      </button>
-                                    </div>
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : null}
-                          </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
                   </div>
                 </section>
               </div>
@@ -801,10 +707,10 @@ export default function CreateOperationModal({
                   />
                   <p className="op-geo-hint">
                     {drawMode === "polygon"
-                      ? "Click to place vertices. Double-click or Save when you have 3+ points."
+                      ? "Click to place vertices. Click Save zone (or Next) when you have 3+ points."
                       : drawMode === "circle"
-                        ? "Click the map to place a circle, then Save zone."
-                        : "Choose Polygon or Circle, then draw on the map."}
+                        ? "Click the map to place a circle, then Save zone (or Next)."
+                        : "Choose Polygon or Circle, draw on the map, then Save zone."}
                   </p>
                 </div>
               </div>
@@ -914,14 +820,22 @@ export default function CreateOperationModal({
                 </button>
               ) : null}
               {step < 4 ? (
-                <button type="button" className="op-btn is-primary" disabled={!canNext()} onClick={() => setStep((s) => s + 1)}>
+                <button
+                  type="button"
+                  className="op-btn is-primary"
+                  disabled={!canNext()}
+                  onClick={() => {
+                    if (step === 3) withFlushedDraft();
+                    setStep((s) => s + 1);
+                  }}
+                >
                   Next
                 </button>
               ) : (
                 <button
                   type="button"
                   className="op-btn is-create"
-                  onClick={() => onSubmit(draft)}
+                  onClick={() => onSubmit(withFlushedDraft())}
                   disabled={!canNext() || submitting}
                 >
                   {submitting ? "Creating…" : "Create Operation"}

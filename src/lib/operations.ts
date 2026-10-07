@@ -551,16 +551,53 @@ export function isoToLocalInput(iso: string) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** Normalize BE / map polygon payloads into a ring of [lng, lat] pairs. */
+export function normalizeBePolygon(raw: unknown): [number, number][] {
+  let value: unknown = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const geo = value as { type?: string; coordinates?: unknown };
+    if (geo.type === "Polygon" && Array.isArray(geo.coordinates)) {
+      value = geo.coordinates[0];
+    } else if (Array.isArray((value as { polygon?: unknown }).polygon)) {
+      value = (value as { polygon: unknown }).polygon;
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  const ring = value
+    .map((point) => {
+      if (!Array.isArray(point) || point.length < 2) return null;
+      const a = Number(point[0]);
+      const b = Number(point[1]);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+      return [a, b] as [number, number];
+    })
+    .filter((point): point is [number, number] => point != null);
+  if (ring.length < 3) return [];
+  // Drop closing duplicate if present.
+  const [firstLng, firstLat] = ring[0];
+  const [lastLng, lastLat] = ring[ring.length - 1];
+  if (firstLng === lastLng && firstLat === lastLat) ring.pop();
+  return ring.length >= 3 ? ring : [];
+}
+
 /** BE polygon [lng,lat] → Leaflet [lat,lng] */
-export function bePolygonToLatLng(polygon: [number, number][]): [number, number][] {
-  if (!polygon.length) return [];
-  const [a, b] = polygon[0];
+export function bePolygonToLatLng(polygon: [number, number][] | unknown): [number, number][] {
+  const ring = normalizeBePolygon(polygon);
+  if (!ring.length) return [];
+  const [a, b] = ring[0];
   // Some older rows may already be Leaflet [lat,lng] (Jakarta lat≈-6, lng≈106).
   const alreadyLatLng = Number.isFinite(a) && Number.isFinite(b) && Math.abs(a) <= 90 && Math.abs(b) > 90;
   if (alreadyLatLng) {
-    return polygon.map(([lat, lng]) => [lat, lng] as [number, number]);
+    return ring.map(([lat, lng]) => [lat, lng] as [number, number]);
   }
-  return polygon.map(([lng, lat]) => [lat, lng] as [number, number]);
+  return ring.map(([lng, lat]) => [lat, lng] as [number, number]);
 }
 
 /** Leaflet [lat,lng] → BE polygon [lng,lat] */
@@ -622,20 +659,23 @@ export function mapPayloadToMarkers(map: OperationMapPayload): OpMarker[] {
 }
 
 export function mapPayloadToFences(map: OperationMapPayload): OpGeofence[] {
-  return map.geofences.map((g) => {
-    const kind = (g.kind === "restricted" || g.kind === "safe" ? g.kind : "recon") as FenceKind;
-    const points = bePolygonToLatLng(g.polygon ?? []);
-    return {
-      id: String(g.id),
-      name: g.name,
-      kind,
-      color: g.color || FENCE_COLORS[kind],
-      // Map payload from BE is id/name/polygon only — estimate area client-side.
-      areaKm2: estimatePolygonAreaKm2(points),
-      points,
-      existingId: g.id,
-    };
-  });
+  return (map.geofences ?? [])
+    .map((g) => {
+      const kind = (g.kind === "restricted" || g.kind === "safe" ? g.kind : "recon") as FenceKind;
+      const points = bePolygonToLatLng(g.polygon ?? []);
+      if (points.length < 3) return null;
+      return {
+        id: String(g.id),
+        name: g.name,
+        kind,
+        color: g.color || FENCE_COLORS[kind],
+        // Map payload from BE is id/name/polygon only — estimate area client-side.
+        areaKm2: estimatePolygonAreaKm2(points),
+        points,
+        existingId: g.id,
+      } satisfies OpGeofence;
+    })
+    .filter((fence): fence is OpGeofence => fence != null);
 }
 
 export function emptyDraft(): OperationDraft {
