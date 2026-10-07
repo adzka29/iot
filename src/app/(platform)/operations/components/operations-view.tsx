@@ -234,20 +234,7 @@ export default function OperationsView() {
 
           <main className="op-stage">
             {highlight ? (
-              <>
-                {!wizardOpen ? (
-                  <div className="op-stage-banner">
-                    <div>
-                      <strong>{highlight.name}</strong>
-                      <span className={`op-status is-${highlight.status}`}>{STATUS_LABELS[highlight.status]}</span>
-                    </div>
-                    <button type="button" className="op-btn is-ghost" onClick={() => setDetailId(highlight.id)}>
-                      View Operation
-                    </button>
-                  </div>
-                ) : null}
-                <OperationsMap fences={mapFences} markers={mapMarkers} />
-              </>
+              <OperationsMap fences={mapFences} markers={mapMarkers} />
             ) : (
               <div className="op-placeholder">
                 <h2>No operation selected</h2>

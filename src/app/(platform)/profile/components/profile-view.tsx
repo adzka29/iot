@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import TopHeader from "@/components/TopHeader";
-import { formatAuditStamp, listMyAuditLogs, type AuditListItem } from "@/lib/audit-logs";
+import { auditClass, auditLabel, formatAuditStamp, listMyAuditLogs, type AuditListItem } from "@/lib/audit-logs";
 import {
   deleteProfileImage,
   formatProfileDate,
@@ -15,6 +15,7 @@ import {
   type ProfileUser,
 } from "@/lib/profile";
 
+const ACTIVITY_PAGE_SIZE = 10;
 const PHOTO_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 export default function ProfileView() {
@@ -28,6 +29,9 @@ export default function ProfileView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [myActivity, setMyActivity] = useState<AuditListItem[]>([]);
+  const [activityTotal, setActivityTotal] = useState(0);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activityLoading, setActivityLoading] = useState(false);
   const [activityNote, setActivityNote] = useState("");
 
   function rememberPhoto(url: string | null) {
@@ -71,19 +75,31 @@ export default function ProfileView() {
 
   useEffect(() => {
     if (tab !== "activity") return;
+    setActivityPage(1);
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "activity") return;
     const controller = new AbortController();
     setActivityNote("");
-    listMyAuditLogs({ page: 1, limit: 20 }, controller.signal)
+    setActivityLoading(true);
+    listMyAuditLogs({ page: activityPage, limit: ACTIVITY_PAGE_SIZE }, controller.signal)
       .then((list) => {
-        if (!controller.signal.aborted) setMyActivity(list.items);
+        if (controller.signal.aborted) return;
+        setMyActivity(list.items);
+        setActivityTotal(list.total);
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
         setMyActivity([]);
+        setActivityTotal(0);
         setActivityNote(reason instanceof Error ? reason.message : "Couldn't load your activity");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setActivityLoading(false);
       });
     return () => controller.abort();
-  }, [tab]);
+  }, [tab, activityPage]);
 
   async function onPhoto(file: File | undefined) {
     if (!file || saving) return;
@@ -199,16 +215,78 @@ export default function ProfileView() {
 
         {tab === "activity" ? (
           <section className="pf-card pf-activity">
-            <h2>Activity</h2>
+            <div className="pf-activity-head">
+              <div>
+                <h2>Activity</h2>
+                <p>Your recent account actions and security events.</p>
+              </div>
+              <span className="pf-activity-meta">
+                {activityTotal} {activityTotal === 1 ? "event" : "events"}
+              </span>
+            </div>
             {activityNote ? <p className="pf-note">{activityNote}</p> : null}
-            <ul>
-              {myActivity.map((item) => (
-                <li key={item.eventId}>
-                  <time>{formatAuditStamp(item.timestamp).full}</time>
-                  <span>{item.event}</span>
-                </li>
-              ))}
-            </ul>
+            <div className="pf-activity-table" role="table" aria-label="Activity log">
+              <div className="pf-activity-row is-head" role="row">
+                <span role="columnheader">When</span>
+                <span role="columnheader">Event</span>
+                <span role="columnheader">Outcome</span>
+              </div>
+              {activityLoading && myActivity.length === 0 ? (
+                <p className="pf-note">Loading activity…</p>
+              ) : null}
+              {!activityLoading && !activityNote && myActivity.length === 0 ? (
+                <p className="pf-note">No activity recorded yet.</p>
+              ) : null}
+              {myActivity.map((item) => {
+                const stamp = formatAuditStamp(item.timestamp);
+                const outcome = auditLabel(item.outcome || "SUCCESS");
+                const tone = auditClass(item.outcome || "success");
+                return (
+                  <article key={item.eventId} className="pf-activity-row" role="row">
+                    <time dateTime={item.timestamp}>
+                      <strong>{stamp.date}</strong>
+                      <small>{stamp.time}</small>
+                    </time>
+                    <div className="pf-activity-event">
+                      <strong>{item.event || auditLabel(item.action)}</strong>
+                      <small>{item.description || item.category || "Account activity"}</small>
+                    </div>
+                    <span className={`pf-activity-outcome is-${tone}`}>{outcome}</span>
+                  </article>
+                );
+              })}
+            </div>
+            {(() => {
+              const pages = Math.max(1, Math.ceil(activityTotal / ACTIVITY_PAGE_SIZE));
+              const from = activityTotal ? (activityPage - 1) * ACTIVITY_PAGE_SIZE + 1 : 0;
+              const to = Math.min(activityPage * ACTIVITY_PAGE_SIZE, activityTotal);
+              return (
+                <div className="pf-activity-pager">
+                  <span>
+                    Showing {from}-{to} of {activityTotal}
+                  </span>
+                  <div className="pf-activity-pager-actions">
+                    <button
+                      type="button"
+                      disabled={activityPage <= 1 || activityLoading}
+                      onClick={() => setActivityPage((page) => Math.max(1, page - 1))}
+                    >
+                      Previous
+                    </button>
+                    <em>
+                      Page {activityPage} / {pages}
+                    </em>
+                    <button
+                      type="button"
+                      disabled={activityPage >= pages || activityLoading}
+                      onClick={() => setActivityPage((page) => Math.min(pages, page + 1))}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </section>
         ) : !user ? (
           <section className="pf-card">

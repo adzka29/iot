@@ -409,13 +409,6 @@ export default function AccessView() {
                   <div><dt>Access Binding</dt><dd>{accessLabel(identity.access_binding)}</dd></div>
                   {access ? <div><dt>Role</dt><dd>{access.role ? accessLabel(access.role) : "—"}</dd></div> : null}
                 </dl>
-                {access?.permissions?.length ? (
-                  <div className="ua-perms">
-                    {[...new Set(access.permissions.map((item) => item.split(".")[0]))].map((item) => (
-                      <span key={item}>{accessLabel(item)}</span>
-                    ))}
-                  </div>
-                ) : null}
               </aside>
             ) : null}
           </div>

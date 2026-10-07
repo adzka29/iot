@@ -2,10 +2,18 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import TopHeader from "@/components/TopHeader";
 import { alertTypeLabel, coordLabel, formatAlertDate, formatSeen, listAlerts, severityLabel, type AlertRecord } from "@/lib/alerts";
-import { categoryLabel, entityLabel, listExplorer, recordSummary, type ExplorerRecord } from "@/lib/explorer";
+import {
+  categoryLabel,
+  entityLabel,
+  latestPinsFromExplorer,
+  listExplorer,
+  recordSummary,
+  type ExplorerRecord,
+  type LiveSoldierPin,
+} from "@/lib/explorer";
 
 const OpsMap = dynamic(() => import("./ops-map"), { ssr: false });
 const HistoryMiniMap = dynamic(() => import("./history-mini-map"), { ssr: false });
@@ -28,19 +36,13 @@ type Marker = {
   position: [number, number];
   tone: "ok" | "warn" | "critical" | "info" | "idle";
   kind: "person" | "vehicle" | "ship" | "weapon";
-  group?: "Alpha" | "Bravo";
+  group?: string;
   status?: string;
   role?: "danru";
 };
 
-const starterMarkers: Marker[] = [
-  { id: "101", label: "101", position: [-6.182, 106.812], tone: "ok", kind: "person", group: "Alpha" },
-  { id: "103", label: "103", position: [-6.162, 106.835], tone: "ok", kind: "person", group: "Alpha" },
-  { id: "104", label: "104", position: [-6.175421, 106.827312], tone: "critical", kind: "person", group: "Alpha", role: "danru" },
-  { id: "107", label: "107", position: [-6.192, 106.821], tone: "ok", kind: "person", group: "Bravo", role: "danru" },
-  { id: "108", label: "108", position: [-6.168, 106.852], tone: "ok", kind: "person", group: "Bravo" },
-  { id: "106", label: "106", position: [-6.181, 106.845], tone: "warn", kind: "person", group: "Alpha" },
-  { id: "107b", label: "107", position: [-6.188, 106.858], tone: "ok", kind: "person", group: "Bravo" },
+/** Weapons stay as overlay; people come from explorer TELEMETRY. */
+const weaponMarkers: Marker[] = [
   { id: "wpn-008", label: "WPN-008", position: [-6.166, 106.814], tone: "ok", kind: "weapon", status: "Connected" },
   { id: "wpn-015", label: "WPN-015", position: [-6.168, 106.823], tone: "ok", kind: "weapon", status: "Connected" },
   { id: "wpn-002", label: "WPN-002", position: [-6.174, 106.826], tone: "ok", kind: "weapon", status: "Connected" },
@@ -54,6 +56,8 @@ const starterMarkers: Marker[] = [
   { id: "wpn-009", label: "WPN-009", position: [-6.190, 106.828], tone: "info", kind: "weapon", status: "Maintenance" },
   { id: "wpn-014", label: "WPN-014", position: [-6.191, 106.838], tone: "info", kind: "weapon", status: "Maintenance" },
 ];
+
+const MAP_POLL_MS = 5000;
 
 type Tone = "ok" | "warn" | "bad";
 
@@ -69,6 +73,105 @@ type SoldierEvent = {
   time: string;
   text: string;
 };
+
+type Dossier = {
+  unit: string;
+  status: string;
+  gnss: string;
+  seen: string;
+  overview: Reading[];
+  vitals: Reading[];
+  gear: Reading[];
+  events: SoldierEvent[];
+};
+
+function pinToMarker(pin: LiveSoldierPin): Marker {
+  return {
+    id: String(pin.soldierId),
+    label: pin.label,
+    position: pin.position,
+    tone: pin.tone,
+    kind: "person",
+    ...(pin.group ? { group: pin.group } : {}),
+  };
+}
+
+function relativeSeen(iso: string) {
+  const stamp = Date.parse(iso);
+  if (Number.isNaN(stamp)) return "—";
+  const seconds = Math.max(0, Math.round((Date.now() - stamp) / 1000));
+  if (seconds < 45) return "Just now";
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} h ago`;
+  return `${Math.round(seconds / 86400)} d ago`;
+}
+
+function dossierFromPin(pin: LiveSoldierPin): Dossier {
+  const t = pin.telemetry;
+  const f = t.flags;
+  const status = f.sos ? "SOS" : f.casualty ? "Casualty" : pin.tone === "warn" ? "Warning" : "Active";
+  const hrTone: Tone = t.hr >= 110 || f.arrhythmia ? "bad" : t.hr >= 95 ? "warn" : "ok";
+  const battTone: Tone = t.batt < 25 || f.low_battery ? "bad" : t.batt < 40 ? "warn" : "ok";
+  const group = pin.group ?? "Ungrouped";
+  return {
+    unit: `${group}`,
+    status,
+    gnss: pin.positionSource ?? f.position_source ?? "GNSS",
+    seen: relativeSeen(pin.eventTime),
+    overview: [
+      {
+        label: "Heart Rate",
+        value: `${t.hr} bpm`,
+        note: hrTone === "ok" ? "Normal" : hrTone === "warn" ? "Elevated" : "Critical",
+        tone: hrTone,
+      },
+      {
+        label: "HRV",
+        value: `${t.hrv} ms`,
+        note: t.hrv < 30 ? "Low" : "Steady",
+        tone: t.hrv < 30 ? "warn" : "ok",
+      },
+      {
+        label: "Battery",
+        value: `${t.batt}%`,
+        note: battTone === "ok" ? "Good" : battTone === "warn" ? "Fair" : "Low",
+        tone: battTone,
+      },
+    ],
+    vitals: [
+      { label: "Heart Rate", value: `${t.hr} bpm`, note: hrTone === "ok" ? "Resting" : "Watch", tone: hrTone },
+      { label: "HRV", value: `${t.hrv} ms`, note: t.hrv < 30 ? "Low" : "Steady", tone: t.hrv < 30 ? "warn" : "ok" },
+      {
+        label: "Body Temp",
+        value: `${t.temp.toFixed(1)} °C`,
+        note: f.heat_stress ? "Heat stress" : "Normal",
+        tone: f.heat_stress ? "warn" : "ok",
+      },
+      { label: "SpO2", value: `${t.spo2}%`, note: t.spo2 < 95 ? "Low" : "Normal", tone: t.spo2 < 95 ? "warn" : "ok" },
+    ],
+    gear: [
+      {
+        label: "Chest Strap",
+        value: f.strap_connected ? "Connected" : "Disconnected",
+        note: t.vital ?? (f.strap_connected ? "OK" : "No vitals"),
+        tone: f.strap_connected ? "ok" : "warn",
+      },
+      {
+        label: "Battery",
+        value: `${t.batt}%`,
+        note: battTone === "ok" ? "Healthy" : "Check pack",
+        tone: battTone,
+      },
+      {
+        label: "GNSS",
+        value: pin.positionSource ?? f.position_source ?? "GNSS",
+        note: `${pin.position[0].toFixed(5)}, ${pin.position[1].toFixed(5)}`,
+        tone: "ok",
+      },
+    ],
+    events: [],
+  };
+}
 
 function withHistory(events: SoldierEvent[]): SoldierEvent[] {
   return [
@@ -93,17 +196,6 @@ type HistoryStop = {
   coords: string;
   source: string;
   tone: "ok" | "warn" | "stale" | "event";
-};
-
-type Dossier = {
-  unit: string;
-  status: string;
-  gnss: string;
-  seen: string;
-  overview: Reading[];
-  vitals: Reading[];
-  gear: Reading[];
-  events: SoldierEvent[];
 };
 
 function buildHistory(label: string, position: [number, number]): HistoryStop[] {
@@ -766,34 +858,94 @@ function toSoldierEvent(record: ExplorerRecord): SoldierEvent {
   };
 }
 
+const MATCHES_POLL_MS = 5000;
+const MATCH_FRESH_MS = 10_000;
+const MATCH_STAGGER_MS = 90;
+
+type FreshMatch = { until: number; order: number };
+
 function RecentMatches({ onSelect }: { onSelect: (id: string, source: MatchSource) => void }) {
   const [open, setOpen] = useState(true);
   const [source, setSource] = useState<MatchSource>("alerts");
   const [rows, setRows] = useState<MatchRow[]>([]);
   const [note, setNote] = useState("Loading alerts");
+  const [tick, setTick] = useState(0);
+  const [fresh, setFresh] = useState<Record<string, FreshMatch>>({});
+  const [now, setNow] = useState(() => Date.now());
+  const rowsRef = useRef<MatchRow[]>([]);
+
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+
+  useEffect(() => {
+    setRows([]);
+    rowsRef.current = [];
+    setFresh({});
+    setNote(source === "alerts" ? "Loading alerts" : "Loading explorer log");
+    setTick(0);
+  }, [source]);
+
+  useEffect(() => {
+    if (!open) return;
+    const id = window.setInterval(() => setTick((n) => n + 1), MATCHES_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [open, source]);
+
+  useEffect(() => {
+    if (!Object.keys(fresh).length) return;
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      setFresh((current) => {
+        const next: Record<string, FreshMatch> = {};
+        for (const [key, meta] of Object.entries(current)) {
+          if (meta.until > t) next[key] = meta;
+        }
+        return Object.keys(next).length === Object.keys(current).length ? current : next;
+      });
+    }, 400);
+    return () => window.clearInterval(id);
+  }, [fresh]);
 
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
-    setNote(source === "alerts" ? "Loading alerts" : "Loading explorer log");
-    setRows([]);
     const load =
       source === "alerts"
-        ? listAlerts({ limit: 24 }, controller.signal).then((list) => list.items.map(alertMatch))
-        : listExplorer({ limit: 24 }, controller.signal).then((list) => list.items.map(explorerMatch));
+        ? listAlerts({ limit: 24, timeRange: "30d" }, controller.signal).then((list) => list.items.map(alertMatch))
+        : listExplorer({ category: "TELEMETRY", limit: 24, timeRange: "30d" }, controller.signal).then((list) =>
+            list.items.map(explorerMatch),
+          );
     load
       .then((items) => {
         if (controller.signal.aborted) return;
+        const previous = rowsRef.current;
+        const prevKeys = new Set(previous.map((row) => row.key));
+        const newcomers = previous.length > 0 ? items.filter((item) => !prevKeys.has(item.key)) : [];
+
+        if (newcomers.length) {
+          const stamped = Date.now();
+          setNow(stamped);
+          setFresh((current) => {
+            const next = { ...current };
+            newcomers.forEach((item, index) => {
+              next[item.key] = { until: stamped + MATCH_FRESH_MS, order: index };
+            });
+            return next;
+          });
+        }
+
+        rowsRef.current = items;
         setRows(items);
-        setNote(items.length ? "" : "No records");
+        setNote(items.length ? "" : source === "alerts" ? "No alerts" : "No records");
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
-        setRows([]);
         setNote(reason instanceof Error ? reason.message : "Couldn't load records");
       });
     return () => controller.abort();
-  }, [open, source]);
+  }, [open, source, tick]);
 
   if (!open) {
     return (
@@ -830,26 +982,34 @@ function RecentMatches({ onSelect }: { onSelect: (id: string, source: MatchSourc
       </div>
       <div className="cmd-matches-list">
         {note ? <p className="cmd-matches-note">{note}</p> : null}
-        {rows.map((match) => (
-          <button
-            key={match.key}
-            type="button"
-            className={`cmd-match is-${match.severity.toLowerCase()}`}
-            onClick={() => {
-              if (match.soldierId && starterMarkers.some((marker) => marker.id === match.soldierId)) {
-                onSelect(match.soldierId, source);
+        {rows.map((match) => {
+          const meta = fresh[match.key];
+          const isFresh = Boolean(meta && meta.until > now);
+          return (
+            <button
+              key={match.key}
+              type="button"
+              className={`cmd-match is-${match.severity.toLowerCase()}${isFresh ? " is-fresh is-enter" : ""}`}
+              style={
+                isFresh && meta
+                  ? ({ ["--match-delay"]: `${meta.order * MATCH_STAGGER_MS}ms` } as CSSProperties)
+                  : undefined
               }
-            }}
-          >
-            <span className="cmd-match-top">
-              <b>{match.title}</b>
-              <em className={`is-${match.severity.toLowerCase()}`}>{match.severity}</em>
-              <time>{match.time}</time>
-            </span>
-            <p>{match.route}</p>
-            <p>{match.detail}</p>
-          </button>
-        ))}
+              onClick={() => {
+                if (match.soldierId) onSelect(match.soldierId, source);
+              }}
+            >
+              <span className="cmd-match-top">
+                <b>{match.title}</b>
+                {isFresh ? <span className="cmd-match-new">NEW</span> : null}
+                <em className={`is-${match.severity.toLowerCase()}`}>{match.severity}</em>
+                <time>{match.time}</time>
+              </span>
+              <p>{match.route}</p>
+              <p>{match.detail}</p>
+            </button>
+          );
+        })}
       </div>
     </aside>
   );
@@ -1096,13 +1256,50 @@ export default function DashboardView() {
   const [cardOpen, setCardOpen] = useState(true);
   const [liveAlerts, setLiveAlerts] = useState<SoldierAlert[]>([]);
   const [liveEvents, setLiveEvents] = useState<SoldierEvent[]>([]);
+  const [livePins, setLivePins] = useState<LiveSoldierPin[]>([]);
+  const [mapTick, setMapTick] = useState(0);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+
+  const personMarkers = useMemo(() => livePins.map(pinToMarker), [livePins]);
+  const mapMarkers = useMemo(() => [...personMarkers, ...weaponMarkers], [personMarkers]);
+  const pinById = useMemo(() => {
+    const map = new Map<string, LiveSoldierPin>();
+    for (const pin of livePins) map.set(String(pin.soldierId), pin);
+    return map;
+  }, [livePins]);
 
   function choose(id: string, source?: MatchSource) {
     setSelected(id);
-    const item = starterMarkers.find((entry) => entry.id === id);
-    setCardOpen(item?.kind === "person");
+    const isWeapon = id.startsWith("wpn-");
+    setCardOpen(!isWeapon);
     setTab(source === "explorer" ? "Events" : source === "alerts" ? "Alerts" : "Overview");
   }
+
+  useEffect(() => {
+    const id = window.setInterval(() => setMapTick((n) => n + 1), MAP_POLL_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    listExplorer({ category: "TELEMETRY", timeRange: "30d", limit: 150 }, controller.signal)
+      .then((list) => {
+        if (controller.signal.aborted) return;
+        const pins = latestPinsFromExplorer(list.items);
+        setLivePins(pins);
+        if (!pins.length) return;
+        const current = selectedRef.current;
+        if (!pins.some((pin) => String(pin.soldierId) === current)) {
+          setSelected(String(pins[0].soldierId));
+          setCardOpen(true);
+        }
+      })
+      .catch(() => {
+        /* keep last pins */
+      });
+    return () => controller.abort();
+  }, [mapTick]);
 
   useEffect(() => {
     const soldierId = Number(selected);
@@ -1110,7 +1307,7 @@ export default function DashboardView() {
     const controller = new AbortController();
     Promise.all([
       listAlerts({ soldier_id: soldierId, limit: 20 }, controller.signal),
-      listExplorer({ soldier_id: soldierId, limit: 20 }, controller.signal),
+      listExplorer({ soldier_id: soldierId, category: "TELEMETRY", limit: 20, timeRange: "30d" }, controller.signal),
     ])
       .then(([alerts, logs]) => {
         if (controller.signal.aborted) return;
@@ -1125,13 +1322,55 @@ export default function DashboardView() {
     return () => controller.abort();
   }, [selected]);
 
-  const marker = starterMarkers.find((item) => item.id === selected) ?? starterMarkers[2];
-  const dossier = dossiers[marker.id] ?? dossiers["104"];
-  const place = `${marker.position[0].toFixed(5)}, ${marker.position[1].toFixed(5)}`;
-  const personOpen = cardOpen && marker.kind === "person";
+  const livePin = pinById.get(selected);
+  const marker =
+    personMarkers.find((item) => item.id === selected) ??
+    weaponMarkers.find((item) => item.id === selected) ??
+    personMarkers[0] ??
+    weaponMarkers[0];
+  const dossier = livePin
+    ? dossierFromPin(livePin)
+    : dossiers[marker?.id ?? ""] ?? {
+        unit: "Ungrouped",
+        status: "—",
+        gnss: "—",
+        seen: "—",
+        overview: [],
+        vitals: [],
+        gear: [],
+        events: [],
+      };
+  const place = marker
+    ? `${marker.position[0].toFixed(5)}, ${marker.position[1].toFixed(5)}`
+    : "—";
+  const personOpen = Boolean(cardOpen && marker?.kind === "person");
   const onViewChange = useCallback((view: "group" | "weapons") => {
     if (view === "weapons") setCardOpen(false);
   }, []);
+
+  if (!marker) {
+    return (
+      <div className="cmd">
+        <TopHeader />
+        <div className="cmd-body">
+          <section className="cmd-stage" aria-label="Operations map">
+            <div className="cmd-map-slot">
+              <OpsMap
+                markers={weaponMarkers}
+                showTracks
+                selected=""
+                cardOpen={false}
+                onSelect={choose}
+                onViewChange={onViewChange}
+              />
+              <RecentMatches onSelect={choose} />
+              <KillChainBar />
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="cmd">
@@ -1140,7 +1379,7 @@ export default function DashboardView() {
         <section className={`cmd-stage${personOpen ? " has-card" : ""}`} aria-label="Operations map">
           <div className="cmd-map-slot">
             <OpsMap
-              markers={starterMarkers}
+              markers={mapMarkers}
               showTracks
               selected={selected}
               cardOpen={personOpen}

@@ -51,10 +51,20 @@ type MapMarker = {
   position: [number, number];
   tone: "ok" | "warn" | "critical" | "info" | "idle";
   kind: "person" | "vehicle" | "ship" | "weapon";
-  group?: "Alpha" | "Bravo";
+  group?: string;
   status?: string;
   role?: "danru";
 };
+
+const GROUP_LINK_COLORS = ["#f59e0b", "#38bdf8", "#4ade80", "#a78bfa", "#f472b6"];
+
+function groupLinkColor(group: string) {
+  if (/bravo/i.test(group)) return "#38bdf8";
+  if (/alpha/i.test(group)) return "#f59e0b";
+  let hash = 0;
+  for (let i = 0; i < group.length; i += 1) hash = (hash + group.charCodeAt(i)) % GROUP_LINK_COLORS.length;
+  return GROUP_LINK_COLORS[hash] ?? GROUP_LINK_COLORS[0];
+}
 
 type OpsMapProps = {
   markers: MapMarker[];
@@ -109,11 +119,11 @@ function pinIcon(marker: MapMarker, selected: boolean) {
 
 function groupLinks(people: MapMarker[]) {
   const lines: { key: string; positions: [number, number][]; color: string }[] = [];
-  const hubs = people.filter((person) => person.role === "danru");
+  const hubs = people.filter((person) => person.role === "danru" && person.group);
 
   for (const hub of hubs) {
     const members = people.filter((person) => person.group === hub.group && person.id !== hub.id);
-    const color = hub.group === "Bravo" ? "#38bdf8" : "#f59e0b";
+    const color = groupLinkColor(hub.group!);
     for (const member of members) {
       lines.push({
         key: `spoke-${hub.id}-${member.id}`,
@@ -134,6 +144,29 @@ function groupLinks(people: MapMarker[]) {
         positions: [ordered[index].position, next.position],
         color,
       });
+    }
+  }
+
+  // No danru yet — still draw a light ring between grouped members from telemetry group_id.
+  if (!hubs.length) {
+    const groups = new Map<string, MapMarker[]>();
+    for (const person of people) {
+      if (!person.group) continue;
+      const list = groups.get(person.group) ?? [];
+      list.push(person);
+      groups.set(person.group, list);
+    }
+    for (const [group, members] of groups) {
+      if (members.length < 2) continue;
+      const color = groupLinkColor(group);
+      const hub = members[0];
+      for (let index = 1; index < members.length; index += 1) {
+        lines.push({
+          key: `mesh-${group}-${hub.id}-${members[index].id}`,
+          positions: [hub.position, members[index].position],
+          color,
+        });
+      }
     }
   }
 

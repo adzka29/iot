@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import TopHeader from "@/components/TopHeader";
 import AlertsChart, { ALERT_COLORS } from "./alerts-chart";
 import {
@@ -138,6 +138,11 @@ export default function AlertsView({
   const [pendingAction, setPendingAction] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(initialId ? Number(initialId) : null);
   const [selected, setSelected] = useState<AlertRecord | null>(null);
+  const [tick, setTick] = useState(0);
+  const [fresh, setFresh] = useState<Record<number, { until: number; order: number }>>({});
+  const [now, setNow] = useState(() => Date.now());
+  const itemsRef = useRef<AlertRecord[]>([]);
+  const alertsBootstrapped = useRef(false);
 
   const knownTypes = options?.alert_types?.length ? options.alert_types : [...ALERT_TYPES];
   const knownSeverities = options?.severities?.length ? options.severities : [...ALERT_SEVERITIES];
@@ -182,6 +187,36 @@ export default function AlertsView({
   }, []);
 
   useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  useEffect(() => {
+    alertsBootstrapped.current = false;
+    setFresh({});
+  }, [filters, page, pageSize]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((n) => n + 1), 5000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!Object.keys(fresh).length) return;
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      setFresh((current) => {
+        const next: Record<number, { until: number; order: number }> = {};
+        for (const [key, meta] of Object.entries(current)) {
+          if (meta.until > t) next[Number(key)] = meta;
+        }
+        return Object.keys(next).length === Object.keys(current).length ? current : next;
+      });
+    }, 400);
+    return () => window.clearInterval(id);
+  }, [fresh]);
+
+  useEffect(() => {
     if (!severities.length || !types.length) {
       setItems([]);
       setTotal(0);
@@ -190,7 +225,8 @@ export default function AlertsView({
       return;
     }
     const controller = new AbortController();
-    setLoading(true);
+    const silent = alertsBootstrapped.current;
+    if (!silent) setLoading(true);
     setError("");
     Promise.all([
       listAlerts({ ...filters, limit: pageSize, offset: (page - 1) * pageSize }, controller.signal),
@@ -198,6 +234,24 @@ export default function AlertsView({
     ])
       .then(([list, nextSummary]) => {
         if (controller.signal.aborted) return;
+        const previous = itemsRef.current;
+        const prevIds = new Set(previous.map((row) => row.id));
+        const newcomers = alertsBootstrapped.current
+          ? list.items.filter((row) => !prevIds.has(row.id))
+          : [];
+        if (newcomers.length) {
+          const stamped = Date.now();
+          setNow(stamped);
+          setFresh((current) => {
+            const next = { ...current };
+            newcomers.forEach((row, index) => {
+              next[row.id] = { until: stamped + 10_000, order: index };
+            });
+            return next;
+          });
+        }
+        alertsBootstrapped.current = true;
+        itemsRef.current = list.items;
         setItems(list.items);
         setTotal(list.total);
         setSummary(nextSummary);
@@ -205,16 +259,18 @@ export default function AlertsView({
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
-        setItems([]);
-        setTotal(0);
-        setSummary(null);
+        if (!silent) {
+          setItems([]);
+          setTotal(0);
+          setSummary(null);
+        }
         setError(reason instanceof Error ? reason.message : "Couldn't load alerts");
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [filters, page, pageSize, severities.length, types.length]);
+  }, [filters, page, pageSize, severities.length, types.length, tick]);
 
   useEffect(() => {
     if (selectedId == null) {
@@ -553,10 +609,22 @@ export default function AlertsView({
                     </tr>
                   ) : items.map((row) => {
                     const when = formatAlertDate(row.event_time);
+                    const meta = fresh[row.id];
+                    const isFresh = Boolean(meta && meta.until > now);
                     return (
                       <tr
                         key={row.id}
-                        className={row.id === selectedId ? "is-selected" : undefined}
+                        className={[
+                          row.id === selectedId ? "is-selected" : "",
+                          isFresh ? "is-fresh is-enter" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ") || undefined}
+                        style={
+                          isFresh && meta
+                            ? ({ ["--alert-delay"]: `${meta.order * 90}ms` } as CSSProperties)
+                            : undefined
+                        }
                         onClick={() => setSelectedId(row.id)}
                       >
                         <td>
@@ -570,7 +638,12 @@ export default function AlertsView({
                             {alertTypeLabel(row.alert_type)}
                           </span>
                         </td>
-                        <td>{soldierLabel(row)}</td>
+                        <td>
+                          <span className="al-soldier-cell">
+                            <b>{soldierLabel(row)}</b>
+                            {isFresh ? <span className="al-row-new">NEW</span> : null}
+                          </span>
+                        </td>
                         <td>{row.group_id ?? "—"}</td>
                         <td>{row.message}</td>
                         <td>{row.position_source ?? "—"}</td>

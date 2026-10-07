@@ -5,7 +5,7 @@ import "./explorer.css";
 
 export const metadata: Metadata = {
   title: "Search / Explorer — SYNAPSE-T",
-  description: "Incoming packets, decoded fields, and communication metadata.",
+  description: "Search and inspect personnel telemetry records.",
 };
 
 export default async function ExplorerPage({
