@@ -65,11 +65,22 @@ function groupLinkColor(group: string) {
   return GROUP_LINK_COLORS[hash] ?? GROUP_LINK_COLORS[0];
 }
 
+/** Operation-scoped geofences from GET /api/operations/:id/map (Leaflet lat/lng). */
+export type OperationMapFence = {
+  id: string;
+  name: string;
+  points: [number, number][];
+  color: string;
+  kind?: string;
+};
+
 type OpsMapProps = {
   markers: MapMarker[];
   showTracks: boolean;
   selected: string;
   cardOpen: boolean;
+  /** Geofences linked to active operation(s) — not master /api/geofences. */
+  operationFences?: OperationMapFence[];
   focus?: {
     nonce: number;
     id: string;
@@ -185,6 +196,19 @@ function FlyToFocus({
   return null;
 }
 
+function FitOperationFences({ fences }: { fences: OperationMapFence[] }) {
+  const map = useMap();
+  const key = fences.map((fence) => fence.id).sort().join(",");
+  useEffect(() => {
+    if (!key) return;
+    const points = fences.flatMap((fence) => fence.points);
+    if (points.length < 2) return;
+    map.fitBounds(points, { padding: [48, 48], maxZoom: 15, animate: false });
+    // Only re-fit when the set of fence ids changes (not on every poll redraw).
+  }, [map, key, fences]);
+  return null;
+}
+
 function ZoomSync({ onZoom }: { onZoom: (zoom: number) => void }) {
   const map = useMap();
   useMapEvents({
@@ -285,6 +309,7 @@ export default function OpsMap({
   showTracks,
   selected,
   cardOpen,
+  operationFences = [],
   focus,
   onSelect,
   onViewChange,
@@ -409,6 +434,7 @@ export default function OpsMap({
         <TileLayer url={NIGHT_TILES} className="cmd-tiles-night" maxZoom={19} />
         <ZoomSync onZoom={setZoom} />
         <FlyToFocus focus={focus} />
+        <FitOperationFences fences={operationFences} />
         <DrawGeofence
           enabled={drawing}
           onAdd={(position) => setDraft((current) => [...current, position])}
@@ -424,6 +450,28 @@ export default function OpsMap({
               />
             ))
           : null}
+        {operationFences.map((fence) => {
+          const tone = fence.color || "#60a5fa";
+          const dashed = fence.kind === "restricted";
+          return (
+            <Polygon
+              key={`op-${fence.id}`}
+              positions={fence.points}
+              pathOptions={{
+                className: "cmd-fence is-operation",
+                color: tone,
+                weight: 2,
+                fillColor: tone,
+                fillOpacity: 0.16,
+                dashArray: dashed ? "6 6" : undefined,
+              }}
+            >
+              <Tooltip direction="center" permanent className="cmd-zone-tip">
+                {fence.name}
+              </Tooltip>
+            </Polygon>
+          );
+        })}
         {fences.map((fence) => {
           const active = selectedFence === fence.id;
           const preset = FENCE_KINDS.find((item) => item.id === fence.kind);

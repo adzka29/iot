@@ -23,6 +23,12 @@ import {
   titleizeHistory,
   type HistoryTrackPoint,
 } from "@/lib/history";
+import {
+  listOperations,
+  mapPayloadToFences,
+  operationMap,
+  type OpGeofence,
+} from "@/lib/operations";
 import { readSessionId } from "@/lib/session";
 
 const OpsMap = dynamic(() => import("./ops-map"), { ssr: false });
@@ -1082,6 +1088,7 @@ export default function DashboardView() {
   const [liveAlerts, setLiveAlerts] = useState<AlertRecord[]>([]);
   const [liveEvents, setLiveEvents] = useState<SoldierEvent[]>([]);
   const [livePins, setLivePins] = useState<LiveSoldierPin[]>([]);
+  const [operationFences, setOperationFences] = useState<OpGeofence[]>([]);
   const [mapTick, setMapTick] = useState(0);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
@@ -1104,6 +1111,40 @@ export default function DashboardView() {
     const id = window.setInterval(() => setMapTick((n) => n + 1), MAP_POLL_MS);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!readSessionId()) {
+      setOperationFences([]);
+      return;
+    }
+    const controller = new AbortController();
+    // ACTIVE first; also PLANNING / ON_HOLD so zones show before Activate.
+    const statuses = ["ACTIVE", "ON_HOLD", "PLANNING"] as const;
+    Promise.all(statuses.map((status) => listOperations({ status, limit: 20 }, controller.signal)))
+      .then(async (pages) => {
+        if (controller.signal.aborted) return;
+        const ops = pages.flatMap((page) => page.items ?? []);
+        const withZones = ops.filter((op) => (op.geofence_count ?? 0) > 0);
+        const targets = withZones.length ? withZones : ops;
+        if (!targets.length) {
+          setOperationFences([]);
+          return;
+        }
+        const maps = await Promise.all(targets.map((op) => operationMap(op.id, controller.signal)));
+        if (controller.signal.aborted) return;
+        const byId = new Map<string, OpGeofence>();
+        for (const map of maps) {
+          for (const fence of mapPayloadToFences(map)) {
+            if (fence.points.length >= 3) byId.set(fence.id, fence);
+          }
+        }
+        setOperationFences([...byId.values()]);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setOperationFences([]);
+      });
+    return () => controller.abort();
+  }, [mapTick]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1184,6 +1225,7 @@ export default function DashboardView() {
                 showTracks
                 selected=""
                 cardOpen={false}
+                operationFences={operationFences}
                 onSelect={choose}
                 onViewChange={onViewChange}
               />
@@ -1206,6 +1248,7 @@ export default function DashboardView() {
               showTracks
               selected={selected}
               cardOpen={personOpen}
+              operationFences={operationFences}
               onSelect={(id) => choose(id)}
               onViewChange={onViewChange}
             />

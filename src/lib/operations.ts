@@ -553,6 +553,13 @@ export function isoToLocalInput(iso: string) {
 
 /** BE polygon [lng,lat] → Leaflet [lat,lng] */
 export function bePolygonToLatLng(polygon: [number, number][]): [number, number][] {
+  if (!polygon.length) return [];
+  const [a, b] = polygon[0];
+  // Some older rows may already be Leaflet [lat,lng] (Jakarta lat≈-6, lng≈106).
+  const alreadyLatLng = Number.isFinite(a) && Number.isFinite(b) && Math.abs(a) <= 90 && Math.abs(b) > 90;
+  if (alreadyLatLng) {
+    return polygon.map(([lat, lng]) => [lat, lng] as [number, number]);
+  }
   return polygon.map(([lng, lat]) => [lat, lng] as [number, number]);
 }
 
