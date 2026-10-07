@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import Link from "next/link";
 import type { Map as LeafletMap } from "leaflet";
 import { Map as LeafletMapClass, divIcon } from "leaflet";
 import { LeafletContext, createLeafletContext } from "@react-leaflet/core";
@@ -564,13 +563,6 @@ export default function OpsMap({
             </div>
           ) : null}
         </div>
-        <Link href="/explorer" aria-label="Search explorer">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.7" />
-            <path d="m16 16 4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-            <path d="M8.2 11h5.6M11 8.2v5.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-          </svg>
-        </Link>
       </div>
     </div>
   );

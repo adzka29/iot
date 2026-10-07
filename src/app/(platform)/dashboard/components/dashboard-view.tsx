@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import TopHeader from "@/components/TopHeader";
 import { alertTypeLabel, coordLabel, formatAlertDate, formatSeen, listAlerts, severityLabel, type AlertRecord } from "@/lib/alerts";
@@ -14,21 +15,18 @@ import {
   type ExplorerRecord,
   type LiveSoldierPin,
 } from "@/lib/explorer";
+import {
+  downsampleTrackPoints,
+  formatHistoryClock,
+  formatHistoryTime,
+  listHistoryTrack,
+  titleizeHistory,
+  type HistoryTrackPoint,
+} from "@/lib/history";
+import { readSessionId } from "@/lib/session";
 
 const OpsMap = dynamic(() => import("./ops-map"), { ssr: false });
 const HistoryMiniMap = dynamic(() => import("./history-mini-map"), { ssr: false });
-
-type Tab = "Overview" | "History" | "Events" | "Alerts" | "Reports";
-
-type SoldierAlert = {
-  id: string;
-  time: string;
-  severity: string;
-  type: string;
-  details: string;
-  position: string;
-  seen: string;
-};
 
 type Marker = {
   id: string;
@@ -69,6 +67,7 @@ type Reading = {
 };
 
 type SoldierEvent = {
+  id?: number;
   color: string;
   time: string;
   text: string;
@@ -189,40 +188,43 @@ function withHistory(events: SoldierEvent[]): SoldierEvent[] {
   ];
 }
 
-type HistoryStop = {
-  time: string;
-  title: string;
-  place: string;
-  coords: string;
-  source: string;
-  tone: "ok" | "warn" | "stale" | "event";
-};
+function historyTone(source: string | null): "ok" | "warn" | "stale" {
+  const key = (source ?? "").toUpperCase();
+  if (key === "STALE") return "stale";
+  if (key === "DEAD_RECKONING" || key === "TRILATERATION") return "warn";
+  return "ok";
+}
 
-function buildHistory(label: string, position: [number, number]): HistoryStop[] {
-  const [lat, lng] = position;
-  const seed = Number(label.replace(/\D/g, "")) || 100;
-  const steps: Omit<HistoryStop, "coords">[] = [
-    { time: "14:24", title: "Current position", place: "Near operational sector", source: "GNSS", tone: "ok" },
-    { time: "14:20", title: "Moved northeast along route", place: "Jl. Medan Merdeka Timur", source: "GNSS", tone: "ok" },
-    { time: "14:11", title: "GNSS fix restored", place: "Lapangan Monas edge", source: "GNSS", tone: "ok" },
-    { time: "13:56", title: "Held at rally point", place: "Gedung area south", source: "Dead Reckoning", tone: "warn" },
-    { time: "13:38", title: "Crossed checkpoint B", place: "Jl. Veteran No. 12", source: "Trilateration", tone: "warn" },
-    { time: "13:12", title: "Patrol leg west", place: "Blok M corridor", source: "GNSS", tone: "ok" },
-    { time: "12:47", title: "Brief stop · no vitals burst", place: "Shade point Alpha", source: "Stale", tone: "stale" },
-    { time: "12:19", title: "Entered watch sector", place: "Gate 3 approach", source: "GNSS", tone: "ok" },
-    { time: "11:54", title: "Event marker logged", place: "Comms handoff zone", source: "Event", tone: "event" },
-    { time: "11:21", title: "Moved south on foot", place: "Side street east", source: "Dead Reckoning", tone: "warn" },
-    { time: "10:48", title: "Route waypoint crossed", place: "Intersection 4", source: "GNSS", tone: "ok" },
-    { time: "10:08", title: "Departed staging area", place: "Staging pad Bravo", source: "GNSS", tone: "ok" },
-  ];
-  return steps.map((step, index) => {
-    const dLat = -0.00055 * (index + (seed % 5) * 0.08);
-    const dLng = 0.00042 * ((index % 3) - 1) + 0.0001 * (seed % 7);
-    return {
-      ...step,
-      coords: `${(lat + dLat).toFixed(5)}, ${(lng + dLng).toFixed(5)}`,
-    };
-  });
+/** Mount Leaflet thumbs only while the row is on screen — full track can be hundreds of points. */
+function LazyHistoryThumb({
+  path,
+  index,
+  time,
+}: {
+  path: [number, number][];
+  index: number;
+  time: string;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setVisible(entry.isIntersecting),
+      { rootMargin: "120px 0px", threshold: 0.01 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="cmd-history-thumb" aria-hidden="true">
+      {visible && path.length ? <HistoryMiniMap path={path} index={index} compact /> : null}
+      <b>{time}</b>
+    </div>
+  );
 }
 
 const dossiers: Record<string, Dossier> = {
@@ -513,30 +515,72 @@ function Stat({ label, value, note, tone, chart = false }: Reading & { chart?: b
   );
 }
 
-function parseCoords(coords: string): [number, number] {
-  const [lat, lng] = coords.split(",").map((part) => Number(part.trim()));
-  return [lat, lng];
-}
-
-function HistoryList({
-  soldierId,
-  items,
-}: {
-  soldierId: string;
-  items: HistoryStop[];
-}) {
+function HistoryList({ soldierId }: { soldierId: string }) {
+  const sid = Number(String(soldierId).replace(/\D/g, ""));
+  const [points, setPoints] = useState<HistoryTrackPoint[]>([]);
+  const [trackTotal, setTrackTotal] = useState(0);
+  const [note, setNote] = useState("Loading history…");
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [index, setIndex] = useState(0);
-  const active = items[Math.min(index, items.length - 1)] ?? null;
-  const progress = items.length <= 1 ? 100 : (index / (items.length - 1)) * 100;
-  const path = useMemo(() => items.map((item) => parseCoords(item.coords)), [items]);
 
   useEffect(() => {
-    if (!playing || items.length === 0) return;
+    if (!Number.isFinite(sid) || sid <= 0) {
+      setPoints([]);
+      setTrackTotal(0);
+      setNote("Invalid soldier");
+      return;
+    }
+    if (!readSessionId()) {
+      setPoints([]);
+      setTrackTotal(0);
+      setNote("Login required for History (history.read).");
+      return;
+    }
+    const controller = new AbortController();
+    setNote("Loading history…");
+    listHistoryTrack(
+      { scope: "SOLDIER", soldier_id: sid, timeRange: "30d" },
+      controller.signal,
+    )
+      .then((track) => {
+        if (controller.signal.aborted) return;
+        const sampled = downsampleTrackPoints(track.points, 400);
+        setTrackTotal(track.points.length);
+        setPoints(sampled);
+        setIndex(0);
+        setNote(sampled.length ? "" : "No TELEMETRY track points");
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setPoints([]);
+        setTrackTotal(0);
+        const message = reason instanceof Error ? reason.message : "Couldn't load history";
+        setNote(
+          message === "Login required" || message === "authentication required"
+            ? "Login required for History (history.read)."
+            : message,
+        );
+      });
+    return () => controller.abort();
+  }, [sid]);
+
+  // Newest-first for the list; playback/map stay chronological (oldest → newest).
+  const listItems = useMemo(() => [...points].reverse(), [points]);
+  const active = points[Math.min(index, Math.max(points.length - 1, 0))] ?? null;
+  const progress = points.length <= 1 ? 100 : (index / Math.max(points.length - 1, 1)) * 100;
+  const path = useMemo(
+    () => points.map((point) => [point.latitude, point.longitude] as [number, number]),
+    [points],
+  );
+  const startLabel = points[0] ? formatHistoryTime(points[0].event_time) : "—";
+  const endLabel = points.length ? formatHistoryTime(points[points.length - 1].event_time) : "—";
+
+  useEffect(() => {
+    if (!playing || points.length === 0) return;
     const id = window.setInterval(() => {
       setIndex((current) => {
-        if (current >= items.length - 1) {
+        if (current >= points.length - 1) {
           setPlaying(false);
           return current;
         }
@@ -544,28 +588,24 @@ function HistoryList({
       });
     }, Math.max(280, 900 / speed));
     return () => window.clearInterval(id);
-  }, [playing, speed, items.length]);
+  }, [playing, speed, points.length]);
 
   return (
     <div className="cmd-history">
       <div className="cmd-playback-card">
         <div className="cmd-playback-map">
-          <HistoryMiniMap path={path} index={index} />
+          {path.length ? <HistoryMiniMap path={path} index={Math.min(index, Math.max(path.length - 1, 0))} /> : null}
           {active ? (
             <div className="cmd-playback-pin">
-              <strong>{active.time}</strong>
-              <span>{active.place}</span>
+              <strong>{formatHistoryClock(active.event_time)}</strong>
+              <span>{active.position_source ? titleizeHistory(active.position_source) : "TELEMETRY"}</span>
             </div>
           ) : null}
           <Link
-            href={`/history?soldier=${encodeURIComponent(soldierId)}`}
+            href={`/history?soldier=${encodeURIComponent(String(sid))}`}
             className="cmd-playback-mainmap"
             onClick={(event) => event.stopPropagation()}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M4 8.2 12 4l8 4.2-8 4.2L4 8.2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-              <path d="m6.2 12.2 5.8 3 5.8-3M6.2 16.2 12 19.2l5.8-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
             Open History
           </Link>
         </div>
@@ -574,8 +614,9 @@ function HistoryList({
             type="button"
             className="cmd-playback-play"
             aria-label={playing ? "Pause playback" : "Play playback"}
+            disabled={!points.length}
             onClick={() => {
-              if (!playing && index >= items.length - 1) setIndex(0);
+              if (!playing && index >= points.length - 1) setIndex(0);
               setPlaying((value) => !value);
             }}
           >
@@ -592,18 +633,19 @@ function HistoryList({
           </button>
           <div className="cmd-playback-main">
             <div className="cmd-playback-times">
-              <span>06 Oct 2026 00:00</span>
-              <span>06 Oct 2026 23:59</span>
+              <span>{startLabel}</span>
+              <span>{endLabel}</span>
             </div>
             <label className="cmd-playback-track">
               <span className="cmd-playback-fill" style={{ width: `${progress}%` }} />
-              {active ? <b style={{ left: `${progress}%` }}>{active.time}:00</b> : null}
+              {active ? <b style={{ left: `${progress}%` }}>{formatHistoryClock(active.event_time)}</b> : null}
               <input
                 type="range"
                 min={0}
-                max={Math.max(items.length - 1, 0)}
-                value={index}
+                max={Math.max(points.length - 1, 0)}
+                value={Math.min(index, Math.max(points.length - 1, 0))}
                 aria-label="Playback position"
+                disabled={!points.length}
                 onChange={(event) => {
                   setPlaying(false);
                   setIndex(Number(event.target.value));
@@ -612,7 +654,7 @@ function HistoryList({
             </label>
             {active ? (
               <p className="cmd-playback-now">
-                {active.title} · {active.source}
+                {active.id} · {active.position_source ? titleizeHistory(active.position_source) : "TELEMETRY"}
               </p>
             ) : null}
           </div>
@@ -633,67 +675,90 @@ function HistoryList({
       </div>
 
       <h3>Movement History</h3>
-      <ul>
-        {items.map((item, itemIndex) => (
-          <li
-            key={`${item.time}-${item.title}`}
-            className={`is-${item.tone}${itemIndex === index ? " is-active" : ""}`}
-            onClick={() => {
-              setPlaying(false);
-              setIndex(itemIndex);
-            }}
-          >
-            <div className="cmd-history-thumb" aria-hidden="true">
-              <HistoryMiniMap path={path} index={itemIndex} compact />
-              <b>{item.time}</b>
-            </div>
-            <div className="cmd-history-body">
-              <strong>{item.title}</strong>
-              <p>{item.place}</p>
-              <small>
-                {item.coords} · {item.source}
-              </small>
-            </div>
-            <Link
-              href={`/history?soldier=${encodeURIComponent(soldierId)}`}
-              className="cmd-event-detail"
-              onClick={(event) => event.stopPropagation()}
-            >
-              View Detail
+      {note ? (
+        <p className="cmd-feed-note">
+          {note}{" "}
+          {/login/i.test(note) ? (
+            <Link href="/login" className="cmd-inline-link">
+              Login
             </Link>
-          </li>
-        ))}
+          ) : null}
+        </p>
+      ) : trackTotal > points.length ? (
+        <p className="cmd-feed-note">
+          Map shows {points.length} of {trackTotal} track points (downsampled for performance).
+        </p>
+      ) : null}
+      <ul>
+        {listItems.map((item, listIndex) => {
+          const pointIndex = points.length - 1 - listIndex;
+          return (
+            <li
+              key={item.id}
+              className={`is-${historyTone(item.position_source)}${pointIndex === index ? " is-active" : ""}`}
+              onClick={() => {
+                setPlaying(false);
+                setIndex(pointIndex);
+              }}
+            >
+              <LazyHistoryThumb
+                path={path.slice(Math.max(0, pointIndex - 2), pointIndex + 3)}
+                index={pointIndex - Math.max(0, pointIndex - 2)}
+                time={formatHistoryClock(item.event_time)}
+              />
+              <div className="cmd-history-body">
+                <strong>{item.id}</strong>
+                <p>
+                  {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}
+                </p>
+                <small>
+                  {item.position_source ? titleizeHistory(item.position_source) : "TELEMETRY"} · source_id{" "}
+                  {item.source_id}
+                </small>
+              </div>
+              <Link
+                href={`/history?soldier=${encodeURIComponent(String(sid))}&id=${item.source_id}`}
+                className="cmd-event-detail"
+                onClick={(event) => event.stopPropagation()}
+              >
+                View Detail
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
 }
 
-function AlertList({ soldierId, items }: { soldierId: string; items: SoldierAlert[] }) {
+function alertTypeClass(alertType: string) {
+  return alertType.toLowerCase().replaceAll("_", "-");
+}
+
+function AlertList({ items }: { items: AlertRecord[] }) {
   return (
     <div className="cmd-alerts-panel">
       <h3>Active Alerts</h3>
       {items.length ? null : <p className="cmd-feed-note">No alerts for this soldier.</p>}
       <ul>
         {items.map((alert) => (
-          <li key={alert.id} className={`is-${alert.severity.toLowerCase()}`}>
-            <span className={`cmd-alert-type is-${alert.type.toLowerCase().replaceAll(" ", "-")}`}>
-              <AlertTypeIcon type={alert.type} />
-            </span>
-            <div className="cmd-alert-body">
-              <div className="cmd-alert-top">
-                <strong>{alert.type}</strong>
-                <span className={`cmd-sev is-${alert.severity.toLowerCase()}`}>{alert.severity}</span>
+          <li key={alert.id} className={`is-${String(alert.severity).toLowerCase()}`}>
+            <Link href={`/alerts?id=${alert.id}`} className="cmd-feed-row">
+              <span className={`cmd-alert-type is-${alertTypeClass(String(alert.alert_type))}`}>
+                <AlertTypeIcon type={String(alert.alert_type)} />
+              </span>
+              <div className="cmd-alert-body">
+                <div className="cmd-alert-top">
+                  <strong>{alert.alert_type}</strong>
+                  <span className={`cmd-sev is-${String(alert.severity).toLowerCase()}`}>{alert.severity}</span>
+                </div>
+                <p>{alert.message}</p>
+                <small>
+                  {formatAlertDate(alert.event_time).time} · {coordLabel(alert)}
+                  {alert.position_source ? ` · ${alert.position_source}` : ""} · Seen{" "}
+                  {formatSeen(alert.last_seen_at || alert.event_time)}
+                </small>
               </div>
-              <p>{alert.details}</p>
-              <small>
-                {alert.time} · {alert.position} · Seen {alert.seen}
-              </small>
-            </div>
-            <Link
-              href={`/alerts?soldier=${encodeURIComponent(soldierId)}&type=${encodeURIComponent(alert.type)}`}
-              className="cmd-event-detail"
-            >
-              View Detail
             </Link>
           </li>
         ))}
@@ -702,7 +767,7 @@ function AlertList({ soldierId, items }: { soldierId: string; items: SoldierAler
   );
 }
 
-function AlertTypeIcon({ type }: { type: SoldierAlert["type"] }) {
+function AlertTypeIcon({ type }: { type: string }) {
   if (type === "SOS") {
     return (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -711,14 +776,14 @@ function AlertTypeIcon({ type }: { type: SoldierAlert["type"] }) {
       </svg>
     );
   }
-  if (type === "Arrhythmia") {
+  if (type === "ARRHYTHMIA") {
     return (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M4 12h3l2-4 3 8 2-4h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
-  if (type === "Low Battery") {
+  if (type === "LOW_BATTERY") {
     return (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <rect x="3.5" y="7.5" width="14" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.7" />
@@ -726,7 +791,7 @@ function AlertTypeIcon({ type }: { type: SoldierAlert["type"] }) {
       </svg>
     );
   }
-  if (type === "Heat Stress") {
+  if (type === "HEAT_STRESS") {
     return (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 4v7.2a2.8 2.8 0 1 0 2.2 2.7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -734,14 +799,14 @@ function AlertTypeIcon({ type }: { type: SoldierAlert["type"] }) {
       </svg>
     );
   }
-  if (type === "Strap Disconnected") {
+  if (type === "STRAP_DISCONNECTED") {
     return (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M8 8.5 5.2 11.3a4 4 0 0 0 5.5 5.5L13.5 14M16 15.5l2.8-2.8a4 4 0 0 0-5.5-5.5L10.5 10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
       </svg>
     );
   }
-  if (type === "Casualty") {
+  if (type === "CASUALTY") {
     return (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <circle cx="12" cy="8" r="3" stroke="currentColor" strokeWidth="1.7" />
@@ -759,12 +824,11 @@ function AlertTypeIcon({ type }: { type: SoldierAlert["type"] }) {
 function EventList({
   title,
   items,
-  soldierId,
   fill = false,
 }: {
   title: string;
   items: SoldierEvent[];
-  soldierId: string;
+  soldierId?: string;
   fill?: boolean;
 }) {
   return (
@@ -773,18 +837,24 @@ function EventList({
       {items.length ? null : <p className="cmd-feed-note">No explorer records for this soldier.</p>}
       <ul>
         {items.map((event) => (
-          <li key={`${event.time}-${event.text}`}>
-            <i style={{ background: event.color }} />
-            <div className="cmd-event-body">
-              <span className="cmd-event-time">{event.time}</span>
-              <span className="cmd-event-text">{event.text}</span>
-            </div>
-            <Link
-              href={`/explorer?q=${encodeURIComponent(`P-${soldierId}`)}`}
-              className="cmd-event-detail"
-            >
-              View Detail
-            </Link>
+          <li key={event.id ?? `${event.time}-${event.text}`}>
+            {event.id != null ? (
+              <Link href={`/explorer?id=${event.id}`} className="cmd-feed-row">
+                <i style={{ background: event.color }} />
+                <div className="cmd-event-body">
+                  <span className="cmd-event-time">{event.time}</span>
+                  <span className="cmd-event-text">{event.text}</span>
+                </div>
+              </Link>
+            ) : (
+              <>
+                <i style={{ background: event.color }} />
+                <div className="cmd-event-body">
+                  <span className="cmd-event-time">{event.time}</span>
+                  <span className="cmd-event-text">{event.text}</span>
+                </div>
+              </>
+            )}
           </li>
         ))}
       </ul>
@@ -796,6 +866,7 @@ type MatchSource = "alerts" | "explorer";
 
 type MatchRow = {
   key: string;
+  href: string;
   soldierId: string | null;
   title: string;
   route: string;
@@ -816,6 +887,7 @@ function alertMatch(alert: AlertRecord): MatchRow {
   const place = alert.gateway_id ?? alert.position_source ?? "Field";
   return {
     key: `alert-${alert.id}`,
+    href: `/alerts?id=${alert.id}`,
     soldierId: alert.soldier_id == null ? null : String(alert.soldier_id),
     title: alert.soldier_id == null ? (alert.entity_id ?? "Alert") : `S-${alert.soldier_id}`,
     route: `${alert.group_id ?? "Ungrouped"} → ${place}`,
@@ -829,6 +901,7 @@ function explorerMatch(record: ExplorerRecord): MatchRow {
   const place = record.gateway_id ?? record.position_source ?? categoryLabel(record.category);
   return {
     key: `log-${record.id}`,
+    href: `/explorer?id=${record.id}`,
     soldierId: record.soldier_id == null ? null : String(record.soldier_id),
     title: record.soldier_id == null ? entityLabel(record) : `S-${record.soldier_id}`,
     route: `${record.group_id ?? categoryLabel(record.category)} → ${place}`,
@@ -838,20 +911,9 @@ function explorerMatch(record: ExplorerRecord): MatchRow {
   };
 }
 
-function toSoldierAlert(alert: AlertRecord): SoldierAlert {
-  return {
-    id: String(alert.id),
-    time: formatAlertDate(alert.event_time).time,
-    severity: severityLabel(alert.severity),
-    type: alertTypeLabel(alert.alert_type),
-    details: alert.message || alertTypeLabel(alert.alert_type),
-    position: alert.position_source ?? coordLabel(alert),
-    seen: formatSeen(alert.last_seen_at || alert.event_time),
-  };
-}
-
 function toSoldierEvent(record: ExplorerRecord): SoldierEvent {
   return {
+    id: record.id,
     color: "#60a5fa",
     time: matchClock(record.event_time).slice(0, 5).replace(".", ":"),
     text: `${categoryLabel(record.category)} · ${recordSummary(record)}`,
@@ -864,9 +926,10 @@ const MATCH_STAGGER_MS = 90;
 
 type FreshMatch = { until: number; order: number };
 
-function RecentMatches({ onSelect }: { onSelect: (id: string, source: MatchSource) => void }) {
+function RecentMatches() {
+  const router = useRouter();
   const [open, setOpen] = useState(true);
-  const [source, setSource] = useState<MatchSource>("alerts");
+  const [source, setSource] = useState<MatchSource>("explorer");
   const [rows, setRows] = useState<MatchRow[]>([]);
   const [note, setNote] = useState("Loading alerts");
   const [tick, setTick] = useState(0);
@@ -973,11 +1036,11 @@ function RecentMatches({ onSelect }: { onSelect: (id: string, source: MatchSourc
         </div>
       </div>
       <div className="cmd-matches-source" role="tablist" aria-label="Match source">
-        <button type="button" role="tab" aria-selected={source === "alerts"} className={source === "alerts" ? "is-active" : ""} onClick={() => setSource("alerts")}>
-          Alerts
-        </button>
         <button type="button" role="tab" aria-selected={source === "explorer"} className={source === "explorer" ? "is-active" : ""} onClick={() => setSource("explorer")}>
           Explorer
+        </button>
+        <button type="button" role="tab" aria-selected={source === "alerts"} className={source === "alerts" ? "is-active" : ""} onClick={() => setSource("alerts")}>
+          Alerts
         </button>
       </div>
       <div className="cmd-matches-list">
@@ -995,9 +1058,7 @@ function RecentMatches({ onSelect }: { onSelect: (id: string, source: MatchSourc
                   ? ({ ["--match-delay"]: `${meta.order * MATCH_STAGGER_MS}ms` } as CSSProperties)
                   : undefined
               }
-              onClick={() => {
-                if (match.soldierId) onSelect(match.soldierId, source);
-              }}
+              onClick={() => router.push(match.href)}
             >
               <span className="cmd-match-top">
                 <b>{match.title}</b>
@@ -1015,246 +1076,10 @@ function RecentMatches({ onSelect }: { onSelect: (id: string, source: MatchSourc
   );
 }
 
-function KillChainBar() {
-  const stages = [
-    { label: "Chest Strap", status: "Connected" },
-    { label: "Shoulder Hub", status: "Active" },
-    { label: "LoRa Mesh", status: "Healthy" },
-    { label: "Gateway Node", status: "Online" },
-    { label: "Satellite", status: "Available" },
-  ];
-
-  return (
-    <aside className="cmd-chain" aria-label="System communication chain">
-      <div className="cmd-chain-lead">
-        <strong>System Communication Chain</strong>
-      </div>
-      <ol className="cmd-chain-flow">
-        {stages.map((stage) => (
-          <li key={stage.label}>
-            <em>{stage.label}</em>
-            <span>
-              <i />
-              {stage.status}
-            </span>
-          </li>
-        ))}
-      </ol>
-    </aside>
-  );
-}
-
-type ReportSectionId = "overview" | "alerts" | "history" | "events" | "vitals" | "equipment";
-
-const REPORT_SECTIONS: {
-  id: ReportSectionId;
-  title: string;
-  note: string;
-  tone: "blue" | "amber" | "cyan" | "slate" | "rose" | "violet";
-  icon: "person" | "alert" | "path" | "list" | "heart" | "gear";
-}[] = [
-  { id: "overview", title: "Overview", note: "Soldier identity, current status, device status, last known position.", tone: "blue", icon: "person" },
-  { id: "alerts", title: "Alerts", note: "All alerts and incidents involving this soldier.", tone: "amber", icon: "alert" },
-  { id: "history", title: "History", note: "Movement history and position records with map.", tone: "cyan", icon: "path" },
-  { id: "events", title: "Events", note: "System and device events (telemetry, status changes, etc).", tone: "slate", icon: "list" },
-  { id: "vitals", title: "Vitals (Optional)", note: "Heart rate, HRV and other vital signs data.", tone: "rose", icon: "heart" },
-  { id: "equipment", title: "Equipment (Optional)", note: "Device information (shoulder hub, chest strap, battery, etc).", tone: "violet", icon: "gear" },
-];
-
-function ReportSectionIcon({ name }: { name: (typeof REPORT_SECTIONS)[number]["icon"] }) {
-  if (name === "person") {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="8" r="3.2" fill="currentColor" />
-        <path d="M5.4 19.2c1.2-3.3 3.5-4.9 6.6-4.9s5.4 1.6 6.6 4.9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (name === "alert") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 4.2 20.2 19H3.8L12 4.2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-        <path d="M12 10v4.2M12 16.8h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (name === "path") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="6.5" cy="17.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
-        <circle cx="17.5" cy="6.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
-        <path d="M8.2 15.8 15.8 8.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (name === "list") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M8 7h11M8 12h11M8 17h11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-        <circle cx="4.5" cy="7" r="1.1" fill="currentColor" />
-        <circle cx="4.5" cy="12" r="1.1" fill="currentColor" />
-        <circle cx="4.5" cy="17" r="1.1" fill="currentColor" />
-      </svg>
-    );
-  }
-  if (name === "heart") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 19s-6.5-4.1-8.4-7.5C2.2 9.2 3.4 6.5 6.1 6.1c1.5-.2 2.9.5 3.9 1.6L12 9.8l2-2.1c1-1.1 2.4-1.8 3.9-1.6 2.7.4 3.9 3.1 2.5 5.4C18.5 14.9 12 19 12 19Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-        <path d="M4.8 12.2h3.2l1.6-2.4 2.2 4.6 1.5-2.2h2.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="3.1" stroke="currentColor" strokeWidth="1.7" />
-      <path d="M12 3.6v2.2M12 18.2v2.2M3.6 12h2.2M18.2 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ReportConfig({ soldierId }: { soldierId: string }) {
-  const [sections, setSections] = useState<Record<ReportSectionId, boolean>>({
-    overview: true,
-    alerts: true,
-    history: true,
-    events: false,
-    vitals: false,
-    equipment: false,
-  });
-  const [format, setFormat] = useState("pdf");
-  const [detail, setDetail] = useState("standard");
-  const [options, setOptions] = useState({
-    maps: true,
-    timestamps: true,
-    raw: true,
-    source: true,
-  });
-
-  function toggleSection(id: ReportSectionId) {
-    setSections((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
-
-  function toggleOption(key: keyof typeof options) {
-    setOptions((prev) => ({ ...prev, [key]: !prev[key] }));
-  }
-
-  return (
-    <div className="cmd-report-builder">
-      <div className="cmd-report-scroll">
-        <section className="cmd-report-block" aria-labelledby="cmd-report-sections">
-          <h3 id="cmd-report-sections">Include Sections</h3>
-          <div className="cmd-report-sections">
-            {REPORT_SECTIONS.map((section) => {
-              const checked = sections[section.id];
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  className={`cmd-report-section is-${section.tone}${checked ? " is-active" : ""}`}
-                  aria-pressed={checked}
-                  onClick={() => toggleSection(section.id)}
-                >
-                  <span className="cmd-report-section-icon">
-                    <ReportSectionIcon name={section.icon} />
-                  </span>
-                  <span className="cmd-report-section-copy">
-                    <strong>{section.title}</strong>
-                    <small>{section.note}</small>
-                  </span>
-                  <span className={`cmd-report-check${checked ? " is-on" : ""}`} aria-hidden="true">
-                    {checked ? (
-                      <svg viewBox="0 0 16 16" fill="none">
-                        <path d="m3.6 8.2 2.8 2.8 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    ) : null}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="cmd-report-block" aria-labelledby="cmd-report-output">
-          <h3 id="cmd-report-output">Output Settings</h3>
-          <div className="cmd-report-fields">
-            <label>
-              <span>Format</span>
-              <div className="cmd-report-select">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M7 3.5h7.2L19 8.3V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1-1.5Z" stroke="currentColor" strokeWidth="1.6" />
-                  <path d="M14 3.6V8h4.5" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                </svg>
-                <select value={format} onChange={(event) => setFormat(event.target.value)} aria-label="Report format">
-                  <option value="pdf">PDF (Recommended)</option>
-                  <option value="csv">CSV</option>
-                  <option value="json">JSON</option>
-                </select>
-              </div>
-            </label>
-            <label>
-              <span>Detail Level</span>
-              <div className="cmd-report-select">
-                <select value={detail} onChange={(event) => setDetail(event.target.value)} aria-label="Detail level">
-                  <option value="summary">Summary</option>
-                  <option value="standard">Standard</option>
-                  <option value="full">Full</option>
-                </select>
-              </div>
-            </label>
-          </div>
-          <div className="cmd-report-toggles">
-            {(
-              [
-                ["maps", "Include map visualizations"],
-                ["timestamps", "Include timestamps"],
-                ["raw", "Include raw data summary"],
-                ["source", "Include position source"],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="cmd-report-toggle">
-                <span>{label}</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={options[key]}
-                  className={options[key] ? "is-on" : ""}
-                  onClick={() => toggleOption(key)}
-                >
-                  <i />
-                </button>
-              </label>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <div className="cmd-report-actions">
-        <button type="button" className="cmd-report-btn is-ghost">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M2.8 12s3.4-6.2 9.2-6.2S21.2 12 21.2 12s-3.4 6.2-9.2 6.2S2.8 12 2.8 12Z" stroke="currentColor" strokeWidth="1.6" />
-            <circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.6" />
-          </svg>
-          Preview Report
-        </button>
-        <button type="button" className="cmd-report-btn is-primary">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M7 3.5h7.2L19 8.3V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1-1.5Z" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M14 3.6V8h4.5M12 11.2v6M9 14.2h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Generate Report
-        </button>
-      </div>
-      <p className="cmd-report-note">Soldier {soldierId}</p>
-    </div>
-  );
-}
-
 export default function DashboardView() {
-  const [tab, setTab] = useState<Tab>("Overview");
   const [selected, setSelected] = useState("104");
   const [cardOpen, setCardOpen] = useState(true);
-  const [liveAlerts, setLiveAlerts] = useState<SoldierAlert[]>([]);
+  const [liveAlerts, setLiveAlerts] = useState<AlertRecord[]>([]);
   const [liveEvents, setLiveEvents] = useState<SoldierEvent[]>([]);
   const [livePins, setLivePins] = useState<LiveSoldierPin[]>([]);
   const [mapTick, setMapTick] = useState(0);
@@ -1269,11 +1094,10 @@ export default function DashboardView() {
     return map;
   }, [livePins]);
 
-  function choose(id: string, source?: MatchSource) {
+  function choose(id: string) {
     setSelected(id);
     const isWeapon = id.startsWith("wpn-");
     setCardOpen(!isWeapon);
-    setTab(source === "explorer" ? "Events" : source === "alerts" ? "Alerts" : "Overview");
   }
 
   useEffect(() => {
@@ -1306,12 +1130,12 @@ export default function DashboardView() {
     if (!Number.isFinite(soldierId)) return;
     const controller = new AbortController();
     Promise.all([
-      listAlerts({ soldier_id: soldierId, limit: 20 }, controller.signal),
+      listAlerts({ soldier_id: soldierId, limit: 50, timeRange: "30d" }, controller.signal),
       listExplorer({ soldier_id: soldierId, category: "TELEMETRY", limit: 20, timeRange: "30d" }, controller.signal),
     ])
       .then(([alerts, logs]) => {
         if (controller.signal.aborted) return;
-        setLiveAlerts(alerts.items.map(toSoldierAlert));
+        setLiveAlerts(alerts.items);
         setLiveEvents(logs.items.map(toSoldierEvent));
       })
       .catch(() => {
@@ -1363,8 +1187,7 @@ export default function DashboardView() {
                 onSelect={choose}
                 onViewChange={onViewChange}
               />
-              <RecentMatches onSelect={choose} />
-              <KillChainBar />
+              <RecentMatches />
             </div>
           </section>
         </div>
@@ -1386,17 +1209,22 @@ export default function DashboardView() {
               onSelect={(id) => choose(id)}
               onViewChange={onViewChange}
             />
-            <RecentMatches onSelect={choose} />
-            <KillChainBar />
+            <RecentMatches />
           </div>
 
           {personOpen ? (
-            <article className="cmd-card">
-              <div className="cmd-identity">
+            <aside className="cmd-card" aria-label={`Soldier ${marker.label} details`}>
+              <header className="cmd-identity">
                 <div className={`cmd-portrait is-${marker.tone}`} aria-hidden="true">
                   <svg viewBox="0 0 24 24">
                     <circle cx="12" cy="8" r="3.1" fill="currentColor" />
-                    <path d="M5.2 19.4c1.3-3.4 3.6-5 6.8-5s5.5 1.6 6.8 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <path
+                      d="M5.2 19.4c1.3-3.4 3.6-5 6.8-5s5.5 1.6 6.8 5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
                   </svg>
                   <b>{marker.label}</b>
                 </div>
@@ -1404,45 +1232,67 @@ export default function DashboardView() {
                   <h2>Soldier {marker.label}</h2>
                   <p>{dossier.unit}</p>
                   <div className="cmd-meta">
-                    <span><i className={`cmd-pill is-${marker.tone === "ok" ? "ok" : marker.tone === "warn" ? "warn" : "critical"}`} /> {dossier.status}</span>
-                    <span><i className="cmd-pill" /> GNSS ({dossier.gnss})</span>
+                    <span>
+                      <i
+                        className={`cmd-pill is-${marker.tone === "ok" ? "ok" : marker.tone === "warn" ? "warn" : "critical"}`}
+                      />{" "}
+                      {dossier.status}
+                    </span>
+                    <span>
+                      <i className="cmd-pill" /> GNSS ({dossier.gnss})
+                    </span>
                     <span>Last seen {dossier.seen}</span>
                     <span className="cmd-place">{place}</span>
                   </div>
                 </div>
-              </div>
-              <div className="cmd-card-main">
-                <div className="cmd-tabs">
-                  {(["Overview", "History", "Events", "Alerts", "Reports"] as Tab[]).map((item) => (
-                    <button key={item} type="button" className={tab === item ? "is-active" : ""} onClick={() => setTab(item)}>
-                      {item}
-                    </button>
+                <button
+                  type="button"
+                  className="cmd-close"
+                  aria-label="Close soldier details"
+                  onClick={() => setCardOpen(false)}
+                >
+                  ×
+                </button>
+              </header>
+
+              <Link
+                href={
+                  liveEvents[0]?.id != null
+                    ? `/explorer?id=${liveEvents[0].id}`
+                    : `/explorer?q=${encodeURIComponent(selected)}`
+                }
+                className="cmd-side-card is-link"
+                aria-label={`Open explorer for soldier ${marker.label}`}
+              >
+                <h3 className="cmd-side-card-title">Overview</h3>
+                <div className="cmd-stats is-overview">
+                  {dossier.overview.map((item) => (
+                    <Stat key={item.label} {...item} chart />
                   ))}
-                  <button type="button" className="cmd-close" aria-label="Close soldier details" onClick={() => setCardOpen(false)}>
-                    ×
-                  </button>
                 </div>
-                <div className={`cmd-card-scroll${tab === "Events" || tab === "History" || tab === "Reports" || tab === "Alerts" ? " is-events" : ""}`}>
-                  {tab === "Overview" ? (
-                    <div className="cmd-stats is-overview">
-                      {dossier.overview.map((item) => (
-                        <Stat key={item.label} {...item} chart />
-                      ))}
-                    </div>
-                  ) : null}
-                  {tab === "History" ? (
-                    <HistoryList soldierId={marker.label} items={buildHistory(marker.label, marker.position)} />
-                  ) : null}
-                  {tab === "Events" ? (
-                    <EventList title="Explorer log" items={liveEvents} soldierId={marker.label} fill />
-                  ) : null}
-                  {tab === "Alerts" ? (
-                    <AlertList soldierId={marker.label} items={liveAlerts} />
-                  ) : null}
-                  {tab === "Reports" ? <ReportConfig soldierId={marker.label} /> : null}
+              </Link>
+
+              <section className="cmd-side-card is-fill is-history">
+                <h3 className="cmd-side-card-title">History</h3>
+                <div className="cmd-side-card-body">
+                  <HistoryList soldierId={marker.label} />
                 </div>
-              </div>
-            </article>
+              </section>
+
+              <section className="cmd-side-card is-fill">
+                <h3 className="cmd-side-card-title">Events</h3>
+                <div className="cmd-side-card-body">
+                  <EventList title="Explorer log" items={liveEvents} soldierId={marker.label} fill />
+                </div>
+              </section>
+
+              <section className="cmd-side-card is-fill">
+                <h3 className="cmd-side-card-title">Alerts</h3>
+                <div className="cmd-side-card-body">
+                  <AlertList items={liveAlerts} />
+                </div>
+              </section>
+            </aside>
           ) : null}
         </section>
       </div>

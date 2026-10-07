@@ -170,6 +170,12 @@ export function parseExplorerSearch(raw: string): { q?: string; soldier_id?: num
 export function buildExplorerQuery(input: {
   search?: string;
   timePreset?: string;
+  category?: string;
+  data_type?: string;
+  group_id?: string;
+  gateway_id?: string;
+  position_source?: string;
+  severity?: string;
   limit?: number;
   offset?: number;
 }): ExplorerQuery {
@@ -177,11 +183,17 @@ export function buildExplorerQuery(input: {
   const preset = input.timePreset && EXPLORER_TIME_PRESETS.includes(input.timePreset as ExplorerTimePreset)
     ? input.timePreset
     : "30d";
+  const category = input.category?.trim() || DEFAULT_CATEGORY;
 
   return {
-    category: DEFAULT_CATEGORY,
+    category,
     ...(q ? { q } : {}),
     ...(soldier_id != null ? { soldier_id } : {}),
+    ...(input.data_type ? { data_type: input.data_type } : {}),
+    ...(input.group_id ? { group_id: input.group_id } : {}),
+    ...(input.gateway_id ? { gateway_id: input.gateway_id } : {}),
+    ...(input.position_source ? { position_source: input.position_source } : {}),
+    ...(input.severity ? { severity: input.severity } : {}),
     timeRange: preset,
     ...(input.limit != null ? { limit: input.limit } : {}),
     ...(input.offset != null ? { offset: input.offset } : {}),

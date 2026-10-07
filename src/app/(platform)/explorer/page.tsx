@@ -11,8 +11,9 @@ export const metadata: Metadata = {
 export default async function ExplorerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; id?: string }>;
 }) {
   const params = await searchParams;
-  return <ExplorerView initialQuery={params.q ?? ""} />;
+  const initialId = params.id != null && Number.isFinite(Number(params.id)) ? Number(params.id) : null;
+  return <ExplorerView initialQuery={params.q ?? ""} initialId={initialId} />;
 }

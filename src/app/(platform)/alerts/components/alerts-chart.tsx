@@ -17,6 +17,10 @@ export type AlertChartBucket = {
 };
 
 export const ALERT_COLORS = {
+  CRITICAL: "#ef4444",
+  WARNING: "#f59e0b",
+  INFO: "#38bdf8",
+  /** @deprecated display labels — prefer BE severity keys */
   Critical: "#ef4444",
   Warning: "#f59e0b",
   Info: "#38bdf8",

@@ -18,13 +18,11 @@ import {
 const HEADER_NAV = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/operations", label: "Operations" },
-  { href: "/explorer", label: "Explorer" },
   { href: "/alerts", label: "Alerts" },
+  { href: "/explorer", label: "Explorer" },
   { href: "/history", label: "History" },
   { href: "/reports", label: "Reports" },
 ];
-
-const HEADER_SOON = ["Statistic"];
 
 export default function TopHeader({ floating = false }: { floating?: boolean }) {
   const router = useRouter();
@@ -98,11 +96,6 @@ export default function TopHeader({ floating = false }: { floating?: boolean }) 
               </Link>
             );
           })}
-          {HEADER_SOON.map((label) => (
-            <span key={label} aria-disabled="true">
-              {label}
-            </span>
-          ))}
         </nav>
       )}
       <div className={floating ? "cmd-account-card" : "cmd-header-end"}>

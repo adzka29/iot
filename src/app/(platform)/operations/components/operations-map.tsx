@@ -17,6 +17,24 @@ import {
 
 export type { DrawMode };
 
+function mapAlive(map: LeafletMap | null | undefined): map is LeafletMap {
+  try {
+    const el = map?.getContainer();
+    return Boolean(el?.isConnected && (map as LeafletMap & { _loaded?: boolean })._loaded);
+  } catch {
+    return false;
+  }
+}
+
+function withMap(map: LeafletMap | null | undefined, fn: (m: LeafletMap) => void) {
+  if (!mapAlive(map)) return;
+  try {
+    fn(map);
+  } catch {
+    /* Leaflet throws _leaflet_pos during teardown / zero-size panes */
+  }
+}
+
 type OperationsMapProps = {
   fences: OpGeofence[];
   markers?: OpMarker[];
@@ -111,9 +129,10 @@ function MapCanvas({
       map = created;
       mapRef.current = created;
       setContext(createLeafletContext(created));
-      created.invalidateSize();
+      withMap(created, (m) => m.invalidateSize({ animate: false }));
       resizeObserver = new ResizeObserver(() => {
-        created.invalidateSize({ animate: false });
+        if (cancelled) return;
+        withMap(created, (m) => m.invalidateSize({ animate: false }));
       });
       resizeObserver.observe(node);
     });
@@ -121,9 +140,16 @@ function MapCanvas({
       cancelled = true;
       window.cancelAnimationFrame(frame);
       resizeObserver?.disconnect();
-      map?.remove();
+      resizeObserver = null;
       mapRef.current = null;
-      setContext(null);
+      if (map) {
+        try {
+          map.remove();
+        } catch {
+          /* ignore */
+        }
+        map = null;
+      }
     };
   }, [mapRef]);
 
@@ -151,13 +177,18 @@ function FitBounds({
     if (!points.length) return;
     const lats = points.map((p) => p[0]);
     const lngs = points.map((p) => p[1]);
-    map.fitBounds(
-      [
-        [Math.min(...lats), Math.min(...lngs)],
-        [Math.max(...lats), Math.max(...lngs)],
-      ],
-      { padding: [36, 36], maxZoom: 15 },
-    );
+    const id = window.requestAnimationFrame(() => {
+      withMap(map, (m) => {
+        m.fitBounds(
+          [
+            [Math.min(...lats), Math.min(...lngs)],
+            [Math.max(...lats), Math.max(...lngs)],
+          ],
+          { padding: [36, 36], maxZoom: 15 },
+        );
+      });
+    });
+    return () => window.cancelAnimationFrame(id);
   }, [map, key, fences, markers]);
   return null;
 }
@@ -178,10 +209,12 @@ function DrawHandler({
   const map = useMap();
 
   useEffect(() => {
-    if (drawMode !== "none") map.doubleClickZoom.disable();
-    else map.doubleClickZoom.enable();
+    withMap(map, (m) => {
+      if (drawMode !== "none") m.doubleClickZoom.disable();
+      else m.doubleClickZoom.enable();
+    });
     return () => {
-      map.doubleClickZoom.enable();
+      withMap(map, (m) => m.doubleClickZoom.enable());
     };
   }, [drawMode, map]);
 
@@ -208,19 +241,6 @@ function DrawHandler({
   return null;
 }
 
-function ZoomRail({ mapRef }: { mapRef: RefObject<LeafletMap | null> }) {
-  return (
-    <div className="cmd-rail op-zoom-rail" role="group" aria-label="Map zoom">
-      <button type="button" onClick={() => mapRef.current?.zoomIn()} aria-label="Zoom in">
-        +
-      </button>
-      <button type="button" onClick={() => mapRef.current?.zoomOut()} aria-label="Zoom out">
-        −
-      </button>
-    </div>
-  );
-}
-
 export default function OperationsMap({
   fences,
   markers = [],
@@ -241,11 +261,11 @@ export default function OperationsMap({
   const mapRef = useRef<LeafletMap | null>(null);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const id = window.setTimeout(() => map.invalidateSize(), 80);
+    const id = window.setTimeout(() => {
+      withMap(mapRef.current, (m) => m.invalidateSize({ animate: false }));
+    }, 80);
     return () => window.clearTimeout(id);
-  }, [fences.length, drawMode]);
+  }, [fences.length, markers.length, drawMode]);
 
   return (
     <div className={`op-map cmd-map${className ? ` ${className}` : ""}`}>
@@ -325,7 +345,6 @@ export default function OperationsMap({
           />
         ))}
       </MapCanvas>
-      <ZoomRail mapRef={mapRef} />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   buildExplorerQuery,
   decodeTelemetry,
   downloadExplorerCsv,
+  explorerOptions,
   EXPLORER_TIME_PRESETS,
   formatBytes,
   formatEventTime,
@@ -19,6 +20,8 @@ import {
   soldierIdLabel,
   summarizeExplorer,
   timelineChart,
+  titleize,
+  type ExplorerOptions,
   type ExplorerRecord,
   type ExplorerSummary,
 } from "@/lib/explorer";
@@ -35,6 +38,18 @@ const INTERVAL_OPTIONS = [
 const TIME_PRESETS = [...EXPLORER_TIME_PRESETS];
 
 type DetailTab = "decoded" | "raw" | "packet";
+
+type FilterState = {
+  search: string;
+  dataType: string;
+  groupId: string;
+};
+
+const EMPTY_FILTERS: FilterState = {
+  search: "",
+  dataType: "",
+  groupId: "",
+};
 
 function jsonTone(text: string) {
   return text.split(/("(?:\\.|[^"\\])*")/g).map((part, index) => (
@@ -69,41 +84,156 @@ function dash(value: unknown) {
   return String(value);
 }
 
-export default function ExplorerView({ initialQuery = "" }: { initialQuery?: string }) {
+function SelectFilter({
+  label,
+  value,
+  options,
+  allLabel = "All",
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  allLabel?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <>
+      <p className="ex-label">{label}</p>
+      <select
+        className="ex-select"
+        value={value}
+        aria-label={label}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">{allLabel}</option>
+        {options.map((name) => (
+          <option key={name} value={name}>
+            {titleize(name)}
+          </option>
+        ))}
+      </select>
+    </>
+  );
+}
+
+export default function ExplorerView({
+  initialQuery = "",
+  initialId = null,
+}: {
+  initialQuery?: string;
+  initialId?: number | null;
+}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [range, setRange] = useState<string>("30d");
-  const [rangeOpen, setRangeOpen] = useState(false);
   const [intervalMs, setIntervalMs] = useState(60 * 60 * 1000);
   const [items, setItems] = useState<ExplorerRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [summary, setSummary] = useState<ExplorerSummary | null>(null);
+  const [options, setOptions] = useState<ExplorerOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(initialId);
   const [selected, setSelected] = useState<ExplorerRecord | null>(null);
   const [detailError, setDetailError] = useState("");
   const [detailTab, setDetailTab] = useState<DetailTab>("decoded");
-  const [checked, setChecked] = useState<number[]>([]);
+  const [filters, setFilters] = useState<FilterState>(() => ({
+    ...EMPTY_FILTERS,
+    search: initialQuery,
+  }));
+  /** Deep-link from dashboard: show only this record until filters reset. */
+  const [focusId, setFocusId] = useState<number | null>(initialId);
 
-  const filters = useMemo(
-    () => buildExplorerQuery({ search: initialQuery, timePreset: range }),
-    [initialQuery, range],
+  function exitFocus() {
+    if (focusId != null) setFocusId(null);
+  }
+
+  function patchFilter<K extends keyof FilterState>(key: K, value: FilterState[K]) {
+    exitFocus();
+    setFilters((current) => ({ ...current, [key]: value }));
+    setPage(1);
+  }
+
+  function resetFilters() {
+    setFocusId(null);
+    setFilters({ ...EMPTY_FILTERS });
+    setRange("30d");
+    setPage(1);
+  }
+
+  const queryBase = useMemo(
+    () =>
+      buildExplorerQuery({
+        search: filters.search,
+        timePreset: range,
+        data_type: filters.dataType || undefined,
+        group_id: filters.groupId || undefined,
+      }),
+    [filters, range],
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    explorerOptions(controller.signal)
+      .then((next) => {
+        if (!controller.signal.aborted) setOptions(next);
+      })
+      .catch(() => {
+        /* keep empty options */
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    const listQuery = buildExplorerQuery({
-      search: initialQuery,
-      timePreset: range,
+
+    if (focusId != null) {
+      readExplorer(focusId, controller.signal)
+        .then((record) => {
+          if (controller.signal.aborted) return;
+          if (!record) {
+            setItems([]);
+            setTotal(0);
+            setSummary(null);
+            setSelectedId(null);
+            setSelected(null);
+            setError("Record not available");
+            return;
+          }
+          setItems([record]);
+          setTotal(1);
+          setSummary(null);
+          setSelectedId(record.id);
+          setSelected(record);
+          setDetailTab("decoded");
+          setDetailError("");
+        })
+        .catch((reason: unknown) => {
+          if (controller.signal.aborted) return;
+          setItems([]);
+          setTotal(0);
+          setSummary(null);
+          setSelectedId(null);
+          setSelected(null);
+          setError(reason instanceof Error ? reason.message : "Couldn't load record");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setLoading(false);
+        });
+      return () => controller.abort();
+    }
+
+    const listQuery = {
+      ...queryBase,
       limit: pageSize,
       offset: (page - 1) * pageSize,
-    });
+    };
     Promise.all([
       listExplorer(listQuery, controller.signal),
-      summarizeExplorer(filters, controller.signal),
+      summarizeExplorer(queryBase, controller.signal),
     ])
       .then(([list, nextSummary]) => {
         if (controller.signal.aborted) return;
@@ -114,7 +244,6 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
           if (current != null && list.items.some((row) => row.id === current)) return current;
           return list.items[0]?.id ?? null;
         });
-        setChecked((current) => current.filter((id) => list.items.some((row) => row.id === id)));
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
@@ -127,9 +256,10 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [filters, initialQuery, page, pageSize, range]);
+  }, [focusId, page, pageSize, queryBase]);
 
   useEffect(() => {
+    if (focusId != null) return;
     if (selectedId == null) {
       setSelected(null);
       setDetailError("");
@@ -149,7 +279,7 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
         setDetailError(reason instanceof Error ? reason.message : "Couldn't load record");
       });
     return () => controller.abort();
-  }, [selectedId]);
+  }, [focusId, selectedId]);
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, pages);
@@ -160,22 +290,15 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
 
   const chartData = timelineChart(summary?.timeline ?? [], intervalMs);
   const decoded = selected ? decodeTelemetry(selected) : null;
-  const allChecked = items.length > 0 && items.every((row) => checked.includes(row.id));
+  const dataTypes = options?.data_types ?? [];
+  const groups = options?.groups ?? [];
 
   async function exportCsv() {
     try {
-      await downloadExplorerCsv(filters);
+      await downloadExplorerCsv(queryBase);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Couldn't export records");
     }
-  }
-
-  function toggleAll() {
-    setChecked(allChecked ? [] : items.map((row) => row.id));
-  }
-
-  function toggleOne(id: number) {
-    setChecked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
   return (
@@ -201,43 +324,6 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
           </div>
 
           <div className="ex-head-actions">
-            <div className="ex-range">
-              <button
-                type="button"
-                className="ex-range-btn"
-                aria-haspopup="listbox"
-                aria-expanded={rangeOpen}
-                onClick={() => setRangeOpen((open) => !open)}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <rect x="4" y="5.5" width="16" height="14.5" rx="2" stroke="currentColor" strokeWidth="1.7" />
-                  <path d="M8 3.8v3.2M16 3.8v3.2M4 10h16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-                </svg>
-                {rangeLabel(range)}
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-              {rangeOpen ? (
-                <div className="ex-range-menu" role="listbox">
-                  {TIME_PRESETS.map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      role="option"
-                      className={range === value ? "is-active" : undefined}
-                      onClick={() => {
-                        setRange(value);
-                        setRangeOpen(false);
-                        setPage(1);
-                      }}
-                    >
-                      {rangeLabel(value)}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
             <button type="button" className="ex-export" onClick={() => void exportCsv()}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M12 4v10.5M8.2 10.8 12 14.6l3.8-3.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
@@ -252,7 +338,9 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
           <div className="ex-chart-top">
             <div>
               <h2>Telemetry Records Over Time</h2>
-              <small>{summary?.total ?? total} records · category=TELEMETRY</small>
+              <small>
+                {summary?.total ?? total} records · TELEMETRY · {rangeLabel(range)}
+              </small>
             </div>
             <label className="ex-interval">
               <select
@@ -274,6 +362,62 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
         </section>
 
         <div className={`ex-main${selectedId != null ? " is-open" : ""}`}>
+          <aside className="ex-filters">
+            <div className="ex-filter-scroll">
+              <div className="ex-filter-head">
+                <strong>Filters</strong>
+              </div>
+
+              <p className="ex-label">Time</p>
+              <div className="ex-range-toggle">
+                {TIME_PRESETS.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={range === value ? "is-active" : undefined}
+                    onClick={() => {
+                      exitFocus();
+                      setRange(value);
+                      setPage(1);
+                    }}
+                  >
+                    {rangeLabel(value)}
+                  </button>
+                ))}
+              </div>
+
+              <p className="ex-label">Soldier ID</p>
+              <label className="ex-search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.7" />
+                  <path d="m16 16 4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+                <input
+                  value={filters.search}
+                  placeholder="S-104 or 104"
+                  onChange={(event) => patchFilter("search", event.target.value)}
+                />
+              </label>
+
+              <SelectFilter
+                label="Group"
+                value={filters.groupId}
+                options={groups}
+                onChange={(value) => patchFilter("groupId", value)}
+              />
+              <SelectFilter
+                label="Record"
+                value={filters.dataType}
+                options={dataTypes}
+                onChange={(value) => patchFilter("dataType", value)}
+              />
+            </div>
+
+            <button type="button" className="ex-filter-reset" onClick={resetFilters}>
+              Reset
+            </button>
+          </aside>
+
           <section className="ex-results">
             <h2>Results ({total} records)</h2>
             {error ? <p className="ex-status">{error}</p> : null}
@@ -281,9 +425,6 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
               <table>
                 <thead>
                   <tr>
-                    <th className="ex-check">
-                      <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Select all" />
-                    </th>
                     <th>
                       Time
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -294,13 +435,12 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
                     <th>Group</th>
                     <th>Record</th>
                     <th>Size</th>
-                    <th className="ex-actions-col" />
                   </tr>
                 </thead>
                 <tbody>
                   {items.length === 0 ? (
                     <tr>
-                      <td className="ex-empty" colSpan={7}>
+                      <td className="ex-empty" colSpan={5}>
                         {loading ? "Loading records…" : "No records"}
                       </td>
                     </tr>
@@ -314,14 +454,6 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
                           setDetailTab("decoded");
                         }}
                       >
-                        <td className="ex-check" onClick={(event) => event.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={checked.includes(row.id)}
-                            onChange={() => toggleOne(row.id)}
-                            aria-label={`Select ${soldierIdLabel(row)}`}
-                          />
-                        </td>
                         <td>{formatEventTime(row.event_time)}</td>
                         <td>
                           <span className="ex-soldier-id">{soldierIdLabel(row)}</span>
@@ -329,11 +461,6 @@ export default function ExplorerView({ initialQuery = "" }: { initialQuery?: str
                         <td>{groupLabel(row)}</td>
                         <td>{row.data_type}</td>
                         <td>{formatBytes(row.raw_bytes_length)}</td>
-                        <td className="ex-actions-col">
-                          <button type="button" className="ex-row-menu" aria-label="Row actions" onClick={(event) => event.stopPropagation()}>
-                            ⋮
-                          </button>
-                        </td>
                       </tr>
                     ))
                   )}

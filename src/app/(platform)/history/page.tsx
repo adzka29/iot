@@ -11,8 +11,9 @@ export const metadata: Metadata = {
 export default async function HistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ soldier?: string }>;
+  searchParams: Promise<{ soldier?: string; id?: string }>;
 }) {
   const params = await searchParams;
-  return <HistoryView initialSoldier={params.soldier ?? "104"} />;
+  const initialId = params.id != null && Number.isFinite(Number(params.id)) ? Number(params.id) : null;
+  return <HistoryView initialSoldier={params.soldier ?? ""} initialId={initialId} />;
 }

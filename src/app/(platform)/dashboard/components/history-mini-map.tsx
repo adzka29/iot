@@ -23,15 +23,7 @@ function pointIcon(kind: "past" | "active" | "next" | "event", compact: boolean)
   });
 }
 
-function SyncView({
-  center,
-  zoom,
-  follow,
-}: {
-  center: [number, number];
-  zoom: number;
-  follow: boolean;
-}) {
+function SyncView({ path }: { path: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
     const id = window.setTimeout(() => map.invalidateSize(), 60);
@@ -39,16 +31,20 @@ function SyncView({
   }, [map]);
 
   useEffect(() => {
-    if (!follow) return;
-    map.setView(center, zoom, { animate: true });
-  }, [map, center, zoom, follow]);
+    if (!path.length) return;
+    if (path.length === 1) {
+      map.setView(path[0], map.getZoom(), { animate: false });
+      return;
+    }
+    map.fitBounds(path, { padding: [18, 18], maxZoom: 16, animate: false });
+  }, [map, path]);
 
   return null;
 }
 
 export default function HistoryMiniMap({ path, index, compact = false }: HistoryMiniMapProps) {
   const safeIndex = Math.min(Math.max(index, 0), Math.max(path.length - 1, 0));
-  const center = path[safeIndex] ?? path[0];
+  const center = path[0];
   if (!center) return null;
   const zoom = compact ? 15 : 14;
   const passed = path.slice(0, safeIndex + 1);
@@ -75,7 +71,7 @@ export default function HistoryMiniMap({ path, index, compact = false }: History
         touchZoom
       >
         <TileLayer url={NIGHT_TILES} className="cmd-tiles-night" maxZoom={19} />
-        <SyncView center={center} zoom={zoom} follow={!compact} />
+        <SyncView path={path} />
         {path.length > 1 ? (
           <Polyline positions={path} pathOptions={{ color: "rgba(96,165,250,0.35)", weight: compact ? 2 : 3 }} />
         ) : null}

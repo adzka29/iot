@@ -1,17 +1,18 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import TopHeader from "@/components/TopHeader";
 import AlertsChart, { ALERT_COLORS } from "./alerts-chart";
+
+const ExplorerMiniMap = dynamic(() => import("../../explorer/components/explorer-mini-map"), { ssr: false });
 import {
   ALERT_SEVERITIES,
   ALERT_TYPES,
   acknowledgeAlert,
   alertOptions,
-  alertTitle,
-  alertTypeLabel,
   closedStatus,
   coordLabel,
   createAlertTicket,
@@ -21,9 +22,6 @@ import {
   listOpenSos,
   readAlert,
   resolveAlert,
-  severityLabel,
-  soldierLabel,
-  statusLabel,
   summarizeAlerts,
   toAlertParams,
   type AlertOptions,
@@ -32,6 +30,16 @@ import {
   type AlertSummary,
   type AlertType,
 } from "@/lib/alerts";
+
+function soldierIdText(alert: AlertRecord) {
+  if (alert.soldier_id != null) return String(alert.soldier_id);
+  return alert.entity_id ?? "—";
+}
+
+function dash(value: string | number | null | undefined) {
+  if (value == null || value === "") return "—";
+  return String(value);
+}
 
 const PAGE_OPTIONS = [8, 20, 50, 100];
 
@@ -115,7 +123,6 @@ export default function AlertsView({
     return Number.isFinite(value) && value > 0 ? value : undefined;
   });
   const [searchText, setSearchText] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [range, setRange] = useState("all");
   const [severities, setSeverities] = useState<string[]>([...ALERT_SEVERITIES]);
   const [types, setTypes] = useState<string[]>(
@@ -123,6 +130,18 @@ export default function AlertsView({
   );
   const [groups, setGroups] = useState<string[]>([]);
   const [status, setStatus] = useState("");
+  const [applied, setApplied] = useState({
+    q: "",
+    range: "all",
+    severities: [...ALERT_SEVERITIES] as string[],
+    types: (ALERT_TYPES.includes(startingType as AlertType) ? [startingType] : [...ALERT_TYPES]) as string[],
+    groups: [] as string[],
+    status: "",
+    soldierId: (() => {
+      const value = Number(initialSoldier);
+      return Number.isFinite(value) && value > 0 ? value : undefined;
+    })() as number | undefined,
+  });
   const [options, setOptions] = useState<AlertOptions | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -138,32 +157,56 @@ export default function AlertsView({
   const [pendingAction, setPendingAction] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(initialId ? Number(initialId) : null);
   const [selected, setSelected] = useState<AlertRecord | null>(null);
+  /** Deep-link from dashboard: show only this alert until filters reset. */
+  const [focusId, setFocusId] = useState<number | null>(() => {
+    const value = Number(initialId);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  });
   const [tick, setTick] = useState(0);
   const [fresh, setFresh] = useState<Record<number, { until: number; order: number }>>({});
   const [now, setNow] = useState(() => Date.now());
   const itemsRef = useRef<AlertRecord[]>([]);
   const alertsBootstrapped = useRef(false);
 
+  function exitFocus() {
+    if (focusId != null) {
+      setFocusId(null);
+      router.replace("/alerts");
+    }
+  }
+
   const knownTypes = options?.alert_types?.length ? options.alert_types : [...ALERT_TYPES];
   const knownSeverities = options?.severities?.length ? options.severities : [...ALERT_SEVERITIES];
   const knownGroups = options?.groups?.length ? options.groups : groups;
 
   const filters = useMemo<Omit<AlertQuery, "limit" | "offset">>(() => {
-    const next: Omit<AlertQuery, "limit" | "offset"> = { timeRange: range };
-    const text = debouncedQuery.trim();
-    if (text) next.q = text;
-    if (severities.length && severities.length < knownSeverities.length) next.severity = severities;
-    if (types.length && types.length < knownTypes.length) next.alert_type = types;
-    if (groups.length && knownGroups.length && groups.length < knownGroups.length) next.group_id = groups;
-    if (status) next.status = status;
-    if (soldierId) next.soldier_id = soldierId;
+    const next: Omit<AlertQuery, "limit" | "offset"> = { timeRange: applied.range };
+    if (applied.q) next.q = applied.q;
+    if (applied.severities.length && applied.severities.length < knownSeverities.length) {
+      next.severity = applied.severities;
+    }
+    if (applied.types.length && applied.types.length < knownTypes.length) next.alert_type = applied.types;
+    if (applied.groups.length && knownGroups.length && applied.groups.length < knownGroups.length) {
+      next.group_id = applied.groups;
+    }
+    if (applied.status) next.status = applied.status;
+    if (applied.soldierId) next.soldier_id = applied.soldierId;
     return next;
-  }, [debouncedQuery, range, severities, types, groups, status, knownSeverities.length, knownTypes.length, knownGroups.length, soldierId]);
+  }, [applied, knownSeverities.length, knownTypes.length, knownGroups.length]);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedQuery(searchText), 300);
-    return () => window.clearTimeout(timer);
-  }, [searchText]);
+  function applyFilters() {
+    exitFocus();
+    setPage(1);
+    setApplied({
+      q: searchText.trim(),
+      range,
+      severities: [...severities],
+      types: [...types],
+      groups: [...groups],
+      status,
+      soldierId,
+    });
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -172,6 +215,9 @@ export default function AlertsView({
         if (controller.signal.aborted) return;
         setOptions(next);
         setGroups((current) => (current.length ? current : next.groups));
+        setApplied((current) =>
+          current.groups.length ? current : { ...current, groups: [...next.groups] },
+        );
       })
       .catch(() => {
         /* filters keep the built-in type and severity lists */
@@ -217,7 +263,8 @@ export default function AlertsView({
   }, [fresh]);
 
   useEffect(() => {
-    if (!severities.length || !types.length) {
+    if (focusId != null) return;
+    if (!applied.severities.length || !applied.types.length) {
       setItems([]);
       setTotal(0);
       setSummary(null);
@@ -270,9 +317,61 @@ export default function AlertsView({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [filters, page, pageSize, severities.length, types.length, tick]);
+  }, [filters, focusId, page, pageSize, applied.severities.length, applied.types.length, tick]);
 
   useEffect(() => {
+    if (focusId == null) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+    setActionError("");
+    readAlert(focusId, controller.signal)
+      .then(async (alert) => {
+        if (controller.signal.aborted) return;
+        if (!alert) {
+          setItems([]);
+          setTotal(0);
+          setSummary(null);
+          setSelectedId(null);
+          setSelected(null);
+          setRelated([]);
+          setError("Alert not available");
+          return;
+        }
+        itemsRef.current = [alert];
+        setItems([alert]);
+        setTotal(1);
+        setSummary(null);
+        setSelectedId(alert.id);
+        setSelected(alert);
+        setDetailTab("Details");
+        if (alert.soldier_id == null) {
+          setRelated([]);
+          return;
+        }
+        const list = await listAlerts({ soldier_id: alert.soldier_id, limit: 6 }, controller.signal);
+        if (!controller.signal.aborted) {
+          setRelated(list.items.filter((item) => item.id !== alert.id).slice(0, 5));
+        }
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setItems([]);
+        setTotal(0);
+        setSummary(null);
+        setSelectedId(null);
+        setSelected(null);
+        setRelated([]);
+        setError(reason instanceof Error ? reason.message : "Couldn't load alert");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [focusId]);
+
+  useEffect(() => {
+    if (focusId != null) return;
     if (selectedId == null) {
       setSelected(null);
       setRelated([]);
@@ -297,7 +396,7 @@ export default function AlertsView({
         setActionError(reason instanceof Error ? reason.message : "Couldn't load alert");
       });
     return () => controller.abort();
-  }, [selectedId]);
+  }, [focusId, selectedId]);
 
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, pages);
@@ -349,14 +448,24 @@ export default function AlertsView({
   }
 
   function resetFilters() {
+    const nextGroups = knownGroups.length ? [...knownGroups] : [];
+    setFocusId(null);
     setSearchText("");
-    setDebouncedQuery("");
     setRange("all");
     setSeverities([...knownSeverities]);
     setTypes([...knownTypes]);
-    setGroups(knownGroups.length ? [...knownGroups] : []);
+    setGroups(nextGroups);
     setStatus("");
     setSoldierId(undefined);
+    setApplied({
+      q: "",
+      range: "all",
+      severities: [...knownSeverities],
+      types: [...knownTypes],
+      groups: nextGroups,
+      status: "",
+      soldierId: undefined,
+    });
     setSelectedId(null);
     setPage(1);
     router.replace("/alerts");
@@ -402,19 +511,19 @@ export default function AlertsView({
           <div className="al-head-end">
             <div className="al-stats">
               <article className="is-critical">
-                <span>Critical</span>
+                <span>CRITICAL</span>
                 <strong>{severityCounts.CRITICAL ?? 0}</strong>
               </article>
               <article className="is-warning">
-                <span>Warning</span>
+                <span>WARNING</span>
                 <strong>{severityCounts.WARNING ?? 0}</strong>
               </article>
               <article className="is-info">
-                <span>Info</span>
+                <span>INFO</span>
                 <strong>{severityCounts.INFO ?? 0}</strong>
               </article>
               <article>
-                <span>Total</span>
+                <span>total</span>
                 <strong>{summary?.total ?? total}</strong>
               </article>
             </div>
@@ -432,7 +541,7 @@ export default function AlertsView({
             <strong>{sos.length} open SOS</strong>
             {sos.slice(0, 4).map((alert) => (
               <button key={alert.id} type="button" onClick={() => setSelectedId(alert.id)}>
-                {soldierLabel(alert)} · {alert.message}
+                {soldierIdText(alert)} · {alert.message}
               </button>
             ))}
           </div>
@@ -445,7 +554,7 @@ export default function AlertsView({
               <small>{summary?.total ?? total} alerts · {range === "all" ? "All time" : "30 days"}</small>
             </div>
             <div className="al-legend">
-              {(["Critical", "Warning", "Info"] as const).map((name) => (
+              {(["CRITICAL", "WARNING", "INFO"] as const).map((name) => (
                 <span key={name}>
                   <i style={{ background: ALERT_COLORS[name] }} />
                   {name}
@@ -464,126 +573,125 @@ export default function AlertsView({
 
         <div className={`al-main${selected ? " is-open" : ""}`}>
           <aside className="al-filters">
-            <div className="al-filter-head">
-              <strong>Filters</strong>
-              <div className="al-filter-actions">
-                <button type="button" className="al-mini-export" onClick={resetFilters}>
-                  Refresh
+            <div className="al-filter-scroll">
+              <div className="al-filter-head">
+                <strong>Filters</strong>
+                <div className="al-filter-actions">
+                  <button type="button" className="al-mini-export" onClick={resetFilters}>
+                    Refresh
+                  </button>
+                  <button type="button" className="al-mini-export" onClick={exportCsv}>
+                    Export
+                  </button>
+                </div>
+              </div>
+
+              <p className="al-label">Search</p>
+              <label className="al-search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.7" />
+                  <path d="m16 16 4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+                <input
+                  value={searchText}
+                  placeholder="Search alerts..."
+                  onChange={(event) => setSearchText(event.target.value)}
+                />
+              </label>
+
+              <p className="al-label">Status</p>
+              <select
+                className="al-status"
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+              >
+                <option value="">All</option>
+                {(options?.statuses?.length ? options.statuses : ["ACTIVE", "ACKNOWLEDGED", "RESOLVED", "CLEARED"]).map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+
+              <p className="al-label">Time Range</p>
+              <div className="al-range-toggle">
+                <button type="button" className={range === "all" ? "is-active" : undefined} onClick={() => setRange("all")}>
+                  All time
                 </button>
-                <button type="button" className="al-mini-export" onClick={exportCsv}>
-                  Export
+                <button type="button" className={range === "30d" ? "is-active" : undefined} onClick={() => setRange("30d")}>
+                  30 days
                 </button>
               </div>
+
+              <p className="al-label">Severity</p>
+              <ul className="al-check">
+                {knownSeverities.map((name) => (
+                  <li key={name}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={severities.includes(name)}
+                        onChange={() => {
+                          setSeverities((current) =>
+                            current.includes(name) ? current.filter((item) => item !== name) : [...current, name],
+                          );
+                        }}
+                      />
+                      <i style={{ background: ALERT_COLORS[name as keyof typeof ALERT_COLORS] ?? "#94a3b8" }} />
+                      {name}
+                    </label>
+                    <span>{severityCounts[name] ?? 0}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <p className="al-label">Alert Type</p>
+              <ul className="al-check">
+                {knownTypes.map((name) => (
+                  <li key={name}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={types.includes(name)}
+                        onChange={() => {
+                          setTypes((current) =>
+                            current.includes(name) ? current.filter((item) => item !== name) : [...current, name],
+                          );
+                        }}
+                      />
+                      <span className="al-type-ico"><AlertGlyph type={name} /></span>
+                      {name}
+                    </label>
+                    <span>{typeCounts[name] ?? 0}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <p className="al-label">Group</p>
+              <ul className="al-check">
+                {groupChoices.map((name) => (
+                  <li key={name}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={!groups.length || groups.includes(name)}
+                        onChange={() => {
+                          setGroups((current) => {
+                            const base = current.length ? current : knownGroups;
+                            return base.includes(name) ? base.filter((item) => item !== name) : [...base, name];
+                          });
+                        }}
+                      />
+                      {name}
+                    </label>
+                  </li>
+                ))}
+              </ul>
             </div>
 
-            <p className="al-label">Search</p>
-            <label className="al-search">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle cx="11" cy="11" r="6.2" stroke="currentColor" strokeWidth="1.7" />
-                <path d="m16 16 4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-              </svg>
-              <input
-                value={searchText}
-                placeholder="Search alerts..."
-                onChange={(event) => {
-                  setSearchText(event.target.value);
-                  setPage(1);
-                }}
-              />
-            </label>
-
-            <p className="al-label">Status</p>
-            <select
-              className="al-status"
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">All</option>
-              {(options?.statuses?.length ? options.statuses : ["ACTIVE", "ACKNOWLEDGED", "RESOLVED", "CLEARED"]).map((name) => (
-                <option key={name} value={name}>{statusLabel(name)}</option>
-              ))}
-            </select>
-
-            <p className="al-label">Time Range</p>
-            <div className="al-range-toggle">
-              <button type="button" className={range === "all" ? "is-active" : undefined} onClick={() => { setRange("all"); setPage(1); }}>
-                All time
-              </button>
-              <button type="button" className={range === "30d" ? "is-active" : undefined} onClick={() => { setRange("30d"); setPage(1); }}>
-                30 days
+            <div className="al-filter-foot">
+              <button type="button" className="al-apply" onClick={applyFilters}>
+                Apply
               </button>
             </div>
-
-            <p className="al-label">Severity</p>
-            <ul className="al-check">
-              {knownSeverities.map((name) => (
-                <li key={name}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={severities.includes(name)}
-                      onChange={() => {
-                        setSeverities((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]));
-                        setPage(1);
-                      }}
-                    />
-                    <i style={{ background: ALERT_COLORS[severityLabel(name) as keyof typeof ALERT_COLORS] ?? "#94a3b8" }} />
-                    {severityLabel(name)}
-                  </label>
-                  <span>{severityCounts[name] ?? 0}</span>
-                </li>
-              ))}
-            </ul>
-
-            <p className="al-label">Alert Type</p>
-            <ul className="al-check">
-              {knownTypes.map((name) => (
-                <li key={name}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={types.includes(name)}
-                      onChange={() => {
-                        setTypes((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]));
-                        setPage(1);
-                      }}
-                    />
-                    <span className="al-type-ico"><AlertGlyph type={name} /></span>
-                    {alertTypeLabel(name)}
-                  </label>
-                  <span>{typeCounts[name] ?? 0}</span>
-                </li>
-              ))}
-            </ul>
-
-            <p className="al-label">Group</p>
-            <ul className="al-check">
-              {groupChoices.map((name) => (
-                <li key={name}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={!groups.length || groups.includes(name)}
-                      onChange={() => {
-                        setGroups((current) => {
-                          const base = current.length ? current : knownGroups;
-                          return base.includes(name) ? base.filter((item) => item !== name) : [...base, name];
-                        });
-                        setPage(1);
-                      }}
-                    />
-                    {name}
-                  </label>
-                </li>
-              ))}
-            </ul>
-
-            <button type="button" className="al-apply" onClick={resetFilters}>
-              Refresh selection
-            </button>
           </aside>
 
           <section className="al-results">
@@ -631,22 +739,24 @@ export default function AlertsView({
                           <b>{when.date}</b>
                           <small>{when.time}</small>
                         </td>
-                        <td><span className={`cmd-sev is-${severityLabel(row.severity).toLowerCase()}`}>{severityLabel(row.severity)}</span></td>
+                        <td>
+                          <span className={`cmd-sev is-${String(row.severity).toLowerCase()}`}>{row.severity}</span>
+                        </td>
                         <td>
                           <span className="al-row-type">
                             <AlertGlyph type={row.alert_type} />
-                            {alertTypeLabel(row.alert_type)}
+                            {row.alert_type}
                           </span>
                         </td>
                         <td>
                           <span className="al-soldier-cell">
-                            <b>{soldierLabel(row)}</b>
+                            <b>{soldierIdText(row)}</b>
                             {isFresh ? <span className="al-row-new">NEW</span> : null}
                           </span>
                         </td>
-                        <td>{row.group_id ?? "—"}</td>
-                        <td>{row.message}</td>
-                        <td>{row.position_source ?? "—"}</td>
+                        <td>{dash(row.group_id)}</td>
+                        <td>{dash(row.message)}</td>
+                        <td>{dash(row.position_source)}</td>
                         <td>{formatSeen(row.last_seen_at)}</td>
                       </tr>
                     );
@@ -683,14 +793,14 @@ export default function AlertsView({
           {selected && clock ? (
             <aside className="al-detail">
               <div className="al-detail-head">
-                <span className={`al-detail-ico is-${severityLabel(selected.severity).toLowerCase()}`}>
+                <span className={`al-detail-ico is-${String(selected.severity).toLowerCase()}`}>
                   <AlertGlyph type={selected.alert_type} />
                 </span>
                 <div>
-                  <h2>{alertTitle(selected.alert_type)}</h2>
+                  <h2>{selected.alert_type}</h2>
                   <small>{selected.alert_code}</small>
                 </div>
-                <span className={`cmd-sev is-${severityLabel(selected.severity).toLowerCase()}`}>{severityLabel(selected.severity)}</span>
+                <span className={`cmd-sev is-${String(selected.severity).toLowerCase()}`}>{selected.severity}</span>
                 <button type="button" aria-label="Close detail" onClick={() => setSelectedId(null)}>×</button>
               </div>
 
@@ -706,49 +816,69 @@ export default function AlertsView({
               {detailTab === "Details" ? (
                 <>
                   <dl className="al-meta">
-                    <div><dt>Event Time</dt><dd>{clock.date} {clock.time}</dd></div>
-                    <div><dt>Alert Type</dt><dd>{alertTypeLabel(selected.alert_type)}</dd></div>
-                    <div><dt>Soldier ID</dt><dd>{soldierLabel(selected)}</dd></div>
-                    <div><dt>Group</dt><dd>{selected.group_id ?? "—"}</dd></div>
-                    <div><dt>Status</dt><dd className="is-active-status">{statusLabel(selected.status)}</dd></div>
-                    <div><dt>Position Source</dt><dd>{selected.position_source ?? "—"}</dd></div>
-                    <div><dt>Last Seen</dt><dd>{formatSeen(selected.last_seen_at)}</dd></div>
-                    <div><dt>Battery Level</dt><dd>{details?.batt != null ? `${details.batt}%` : "—"}</dd></div>
+                    <div><dt>event_time</dt><dd>{clock.date} {clock.time}</dd></div>
+                    <div><dt>alert_type</dt><dd>{selected.alert_type}</dd></div>
+                    <div><dt>soldier_id</dt><dd>{dash(selected.soldier_id)}</dd></div>
+                    <div><dt>group_id</dt><dd>{dash(selected.group_id)}</dd></div>
+                    <div><dt>status</dt><dd className="is-active-status">{selected.status}</dd></div>
+                    <div><dt>position_source</dt><dd>{dash(selected.position_source)}</dd></div>
+                    <div><dt>last_seen_at</dt><dd>{formatSeen(selected.last_seen_at)}</dd></div>
+                    <div><dt>message</dt><dd>{dash(selected.message)}</dd></div>
                   </dl>
 
                   <div className="al-location">
                     <div className="al-location-head">
-                      <strong>Location</strong>
+                      <strong>latitude / longitude</strong>
                       <small>{coordLabel(selected)}</small>
                     </div>
-                    <div className="al-mini-map" aria-hidden="true">
-                      <span className="al-sos-pin">{selected.alert_type === "SOS" ? "SOS" : alertTypeLabel(selected.alert_type).slice(0, 3).toUpperCase()}</span>
+                    <div className="al-mini-map">
+                      {selected.latitude != null && selected.longitude != null ? (
+                        <ExplorerMiniMap lat={selected.latitude} lng={selected.longitude} />
+                      ) : (
+                        <div className="al-mini-map-empty">No fix</div>
+                      )}
                     </div>
-                    <Link href="/dashboard" className="al-map-link">
+                    <Link
+                      href={
+                        selected.soldier_id != null
+                          ? `/dashboard?soldier=${encodeURIComponent(String(selected.soldier_id))}`
+                          : "/dashboard"
+                      }
+                      className="al-map-link"
+                    >
                       Open on main map
                     </Link>
                   </div>
 
                   <div className="al-vitals">
                     <div className="al-vitals-head">
-                      <strong>Latest Vital</strong>
-                      <small>from Chest Strap · {clock.time}</small>
+                      <strong>details</strong>
+                      <small>
+                        batt {details?.batt != null ? `${details.batt}%` : "—"} · gateway_id {dash(selected.gateway_id)} ·
+                        source_record_id {dash(selected.source_record_id)}
+                      </small>
                     </div>
                     <div className="al-vital-grid">
                       <article>
-                        <span>Heart Rate</span>
-                        <strong>{details?.hr != null ? `${details.hr} bpm` : "—"}</strong>
-                        <small className={vitalTone("hr", selected) ? "is-bad" : undefined}>{vitalTone("hr", selected) ? "High" : "Normal"}</small>
+                        <span>hr</span>
+                        <strong>{details?.hr != null ? String(details.hr) : "—"}</strong>
+                        <small className={vitalTone("hr", selected) ? "is-bad" : undefined}>
+                          {details?.hr != null ? "bpm" : "—"}
+                        </small>
                       </article>
                       <article>
-                        <span>HRV</span>
-                        <strong>{details?.hrv != null ? `${details.hrv} ms` : "—"}</strong>
-                        <small className={vitalTone("hrv", selected) ? "is-warn" : undefined}>{vitalTone("hrv", selected) ? "Low" : "Steady"}</small>
+                        <span>hrv</span>
+                        <strong>{details?.hrv != null ? String(details.hrv) : "—"}</strong>
+                        <small className={vitalTone("hrv", selected) ? "is-warn" : undefined}>
+                          {details?.hrv != null ? "ms" : "—"}
+                        </small>
                       </article>
                       <article>
-                        <span>Body Temp</span>
-                        <strong>{details?.temp != null ? `${details.temp} °C` : "—"}</strong>
-                        <small className={vitalTone("temp", selected) ? "is-bad" : undefined}>{vitalTone("temp", selected) ? "High" : "Normal"}</small>
+                        <span>temp</span>
+                        <strong>{details?.temp != null ? String(details.temp) : "—"}</strong>
+                        <small className={vitalTone("temp", selected) ? "is-bad" : undefined}>
+                          {details?.temp != null ? "°C" : "—"}
+                        </small>
                       </article>
                     </div>
                   </div>
@@ -781,13 +911,15 @@ export default function AlertsView({
                 </>
               ) : (
                 <div className="al-related">
-                  <p>Related alerts for {soldierLabel(selected)}</p>
+                  <p>Related alerts for soldier_id {dash(selected.soldier_id)}</p>
                   <ul>
                     {related.map((row) => (
                       <li key={row.id}>
                         <button type="button" onClick={() => setSelectedId(row.id)}>
-                          <strong>{alertTypeLabel(row.alert_type)}</strong>
-                          <small>{formatAlertDate(row.event_time).date} {formatAlertDate(row.event_time).time}</small>
+                          <strong>{row.alert_type}</strong>
+                          <small>
+                            {formatAlertDate(row.event_time).date} {formatAlertDate(row.event_time).time} · {row.status}
+                          </small>
                         </button>
                       </li>
                     ))}

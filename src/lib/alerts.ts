@@ -1,3 +1,5 @@
+import { readSessionId } from "@/lib/session";
+
 export type AlertSeverity = "CRITICAL" | "WARNING" | "INFO";
 export type AlertStatus = "ACTIVE" | "ACKNOWLEDGED" | "RESOLVED" | "CLEARED";
 export type AlertType =
@@ -179,8 +181,21 @@ async function readError(response: Response) {
   return `Request failed (${response.status})`;
 }
 
+function authHeaders(required = true): HeadersInit {
+  const session = readSessionId();
+  if (!session) {
+    if (required) throw new Error("Login required");
+    return {};
+  }
+  return { Authorization: `Bearer ${session}` };
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, { signal, cache: "no-store" });
+  const response = await fetch(path, {
+    signal,
+    cache: "no-store",
+    headers: authHeaders(),
+  });
   if (!response.ok) throw new Error(await readError(response));
   return (await response.json()) as T;
 }
@@ -205,14 +220,11 @@ export function readAlert(id: number, signal?: AbortSignal) {
   return getJson<AlertRecord>(`/api/alerts/${id}`, signal);
 }
 
-async function postAlert(path: string, body?: unknown, auth = false) {
-  const headers: Record<string, string> = {};
+async function postAlert(path: string, body?: unknown) {
+  const headers: Record<string, string> = {
+    ...(authHeaders() as Record<string, string>),
+  };
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (auth) {
-    const session = window.localStorage.getItem("session_id");
-    if (!session) throw new Error("Login required to create a ticket");
-    headers.Authorization = `Bearer ${session}`;
-  }
   const response = await fetch(path, {
     method: "POST",
     headers,
@@ -223,16 +235,18 @@ async function postAlert(path: string, body?: unknown, auth = false) {
   return response.json().catch(() => null);
 }
 
-export function acknowledgeAlert(id: number, by = "operator") {
-  return postAlert(`/api/alerts/${id}/acknowledge`, { by });
+/** BE fills acknowledged_by from the session user — no body. */
+export function acknowledgeAlert(id: number) {
+  return postAlert(`/api/alerts/${id}/acknowledge`);
 }
 
-export function resolveAlert(id: number, by = "operator") {
-  return postAlert(`/api/alerts/${id}/resolve`, { by });
+/** BE fills resolved_by from the session user — no body. */
+export function resolveAlert(id: number) {
+  return postAlert(`/api/alerts/${id}/resolve`);
 }
 
 export function createAlertTicket(id: number) {
-  return postAlert(`/api/alerts/${id}/ticket`, undefined, true);
+  return postAlert(`/api/alerts/${id}/ticket`);
 }
 
 export function formatAlertDate(iso: string) {

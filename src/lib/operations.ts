@@ -1,15 +1,178 @@
-export type OperationStatus = "active" | "planning" | "completed";
+import { readSessionId } from "@/lib/session";
+
+/** BE status enum — use for API; CSS via statusCss(). */
+export type OperationStatus = "PLANNING" | "ACTIVE" | "ON_HOLD" | "COMPLETED" | "CANCELLED";
+
 export type OperationType = "reconnaissance" | "patrol" | "security" | "support";
 export type FenceKind = "recon" | "restricted" | "safe";
 export type DrawMode = "none" | "polygon" | "circle";
 
+export type OperationListItem = {
+  id: number;
+  operation_code: string;
+  name: string;
+  description: string | null;
+  type: string | null;
+  status: OperationStatus | string;
+  start_at: string;
+  end_at: string;
+  group_count: number;
+  personnel_count: number;
+  geofence_count: number;
+  created_at: string;
+};
+
+export type GroupRef = {
+  id: number;
+  name: string;
+  leader_soldier_id: number | null;
+  personnel_count: number;
+  commander_name?: string | null;
+};
+
+export type OperationGeofenceRef = {
+  id: number;
+  name: string;
+  kind: string | null;
+  color: string | null;
+  area_km2: number | null;
+};
+
+export type OperationDetail = {
+  id: number;
+  operation_code: string;
+  name: string;
+  description: string | null;
+  type: string | null;
+  status: OperationStatus | string;
+  start_at: string;
+  end_at: string;
+  groups: GroupRef[];
+  geofences: OperationGeofenceRef[];
+  summary: { group_count: number; personnel_count: number; geofence_count: number };
+  counts: { groups: number; personnel: number; geofences: number };
+  created_by: { id: number; name: string } | null;
+  created_at: string;
+};
+
+/** GET .../groups → items[] */
+export type GroupItem = {
+  id: number;
+  name: string;
+  leader_soldier_id: number | null;
+  commander: { soldier_id: number } | null;
+  personnel_count: number;
+  status: string;
+};
+
+export type OperationListPage = {
+  items: OperationListItem[];
+  page: number;
+  limit: number;
+  total: number;
+};
+
+export type OperationsSummary = {
+  total: number;
+  planning: number;
+  active: number;
+  on_hold: number;
+  completed: number;
+  cancelled: number;
+};
+
+export type OperationsFilterOptions = {
+  statuses: string[];
+  groups: { id: number; name: string }[];
+};
+
+export type PersonnelChoice = {
+  soldier_id: number;
+  name: string;
+  group_id: number | null;
+  group_name: string | null;
+  access_group: string;
+  last_seen: string | null;
+  lat: number | null;
+  lon: number | null;
+};
+
+export type MapGeofence = {
+  id: number;
+  name: string;
+  kind?: string | null;
+  color?: string | null;
+  polygon: [number, number][]; // [lng, lat] from BE
+};
+
+export type MapPosition = {
+  soldier_id: number;
+  group_id: number | null;
+  group_name: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  event_time: string | null;
+};
+
+export type OperationMapPayload = {
+  operation: { id: number; name: string };
+  groups: GroupRef[];
+  personnel: { soldier_id: number; group_id: number; group_name: string }[];
+  geofences: MapGeofence[];
+  positions: MapPosition[];
+};
+
+export type OpAlert = {
+  id: number;
+  type: string;
+  severity: string;
+  soldier_id: number | null;
+  group_id: number | null;
+  status: string;
+  event_time: string;
+};
+
+export type OpTicket = {
+  id: number;
+  ticket_code: string;
+  status: string;
+  priority: string;
+  source_alert_id: number;
+  alert_type: string;
+};
+
+export type CreateOperationBody = {
+  name: string;
+  description?: string | null;
+  type?: string | null;
+  start_at: string;
+  end_at: string;
+  group_ids?: number[];
+  groups?: {
+    name: string;
+    member_soldier_ids: number[];
+    leader_soldier_id?: number;
+    description?: string | null;
+  }[];
+  geofence_ids?: number[];
+  new_geofences?: {
+    name: string;
+    polygon: [number, number][];
+    kind?: string | null;
+    color?: string | null;
+    description?: string | null;
+    area_km2?: number;
+  }[];
+};
+
+/** UI helpers kept for wizard / map markers */
 export type OpGroup = {
   id: string;
   name: string;
   personnel: number;
   online: number;
   leader: string;
-  status: "deployed" | "active" | "standby";
+  status: string;
 };
 
 export type OpPerson = {
@@ -18,7 +181,6 @@ export type OpPerson = {
   name: string;
   status: "active" | "standby" | "critical";
   role?: "danru" | "member";
-  /** Live map position — source of truth for who can be assigned */
   position: [number, number];
 };
 
@@ -27,6 +189,8 @@ export type OpAssignment = {
   groupName: string;
   personIds: string[];
   leaderId: string | null;
+  /** When set, link existing Settings group PK instead of creating inline */
+  existingGroupId?: number;
 };
 
 export type OpGeofence = {
@@ -35,7 +199,9 @@ export type OpGeofence = {
   kind: FenceKind;
   color: string;
   areaKm2: number;
+  /** Leaflet [lat, lng] */
   points: [number, number][];
+  existingId?: number;
 };
 
 export type OpMarker = {
@@ -47,12 +213,14 @@ export type OpMarker = {
   tone?: "ok" | "warn" | "critical" | "info" | "idle";
 };
 
+/** @deprecated prefer OperationListItem / OperationDetail — kept for gradual UI migrate */
 export type Operation = {
-  id: string;
+  id: number;
+  operation_code: string;
   name: string;
   description: string;
-  status: OperationStatus;
-  type: OperationType;
+  status: OperationStatus | string;
+  type: string;
   startAt: string;
   endAt: string;
   groupIds: string[];
@@ -61,13 +229,26 @@ export type Operation = {
   alerts: { total: number; critical: number };
   tickets: { total: number; open: number };
   markers: OpMarker[];
+  group_count: number;
+  personnel_count: number;
+  geofence_count: number;
+};
+
+export type OperationDraft = {
+  name: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  type: OperationType;
+  groupIds: string[];
+  assignments: OpAssignment[];
+  geofences: OpGeofence[];
 };
 
 export const MAP_CENTER: [number, number] = [-6.175421, 106.827312];
 export const MAP_ZOOM = 13;
 export const NIGHT_TILES = "/tiles/{z}/{x}/{y}.png";
 
-/** Match dashboard ops-map fence tones */
 export const FENCE_COLORS: Record<FenceKind, string> = {
   recon: "#f59e0b",
   restricted: "#f87171",
@@ -81,154 +262,374 @@ export const OPERATION_TYPES: { id: OperationType; label: string }[] = [
   { id: "support", label: "Support" },
 ];
 
-export const STATUS_LABELS: Record<OperationStatus, string> = {
-  active: "Active",
-  planning: "Planning",
-  completed: "Completed",
+export const STATUS_LABELS: Record<string, string> = {
+  PLANNING: "PLANNING",
+  ACTIVE: "ACTIVE",
+  ON_HOLD: "ON_HOLD",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
 };
 
-export const SEED_GROUPS: OpGroup[] = [
-  { id: "g-alpha", name: "Alpha", personnel: 12, online: 10, leader: "S-101", status: "deployed" },
-  { id: "g-bravo", name: "Bravo", personnel: 10, online: 8, leader: "S-108", status: "active" },
-  { id: "g-charlie", name: "Charlie", personnel: 8, online: 6, leader: "S-120", status: "standby" },
-  { id: "g-delta", name: "Delta", personnel: 9, online: 7, leader: "S-130", status: "active" },
-];
-
-/** Soldiers currently visible on the live map — only these can be formed into operation groups */
-export const MAP_SOLDIERS: OpPerson[] = [
-  { id: "101", label: "S-101", name: "Soldier 101", status: "active", position: [-6.182, 106.812] },
-  { id: "103", label: "S-103", name: "Soldier 103", status: "active", position: [-6.162, 106.835] },
-  { id: "104", label: "S-104", name: "Danru 104", status: "critical", role: "danru", position: [-6.175421, 106.827312] },
-  { id: "106", label: "S-106", name: "Soldier 106", status: "standby", position: [-6.181, 106.845] },
-  { id: "107", label: "S-107", name: "Danru 107", status: "active", role: "danru", position: [-6.192, 106.821] },
-  { id: "108", label: "S-108", name: "Soldier 108", status: "active", position: [-6.168, 106.852] },
-  { id: "109", label: "S-109", name: "Soldier 109", status: "active", position: [-6.188, 106.858] },
-  { id: "110", label: "S-110", name: "Soldier 110", status: "standby", position: [-6.171, 106.842] },
-  { id: "111", label: "S-111", name: "Soldier 111", status: "active", position: [-6.174, 106.85] },
-  { id: "112", label: "S-112", name: "Soldier 112", status: "active", position: [-6.179, 106.832] },
-];
-
-/** @deprecated use MAP_SOLDIERS */
-export const SEED_PERSONNEL = MAP_SOLDIERS;
-
-export function mapSoldierMarkers(people: OpPerson[] = MAP_SOLDIERS): OpMarker[] {
-  return people.map((person) => ({
-    id: person.id,
-    label: person.label,
-    position: person.position,
-    role: person.role === "danru" ? ("danru" as const) : undefined,
-    tone:
-      person.status === "critical" ? ("critical" as const) : person.status === "standby" ? ("idle" as const) : ("ok" as const),
-  }));
+export function statusCss(status: string) {
+  return String(status).toLowerCase().replaceAll("_", "-");
 }
 
-export const SEED_GEOFENCES: OpGeofence[] = [
-  {
-    id: "gf-recon",
-    name: "RECON ZONE",
-    kind: "recon",
-    color: FENCE_COLORS.recon,
-    areaKm2: 18.4,
-    points: [
-      [-6.168, 106.82],
-      [-6.168, 106.835],
-      [-6.178, 106.838],
-      [-6.182, 106.822],
-    ],
-  },
-  {
-    id: "gf-restricted",
-    name: "RESTRICTED AREA",
-    kind: "restricted",
-    color: FENCE_COLORS.restricted,
-    areaKm2: 14.2,
-    points: [
-      [-6.172, 106.828],
-      [-6.174, 106.842],
-      [-6.186, 106.84],
-      [-6.184, 106.826],
-    ],
-  },
-  {
-    id: "gf-safe",
-    name: "SAFE CORRIDOR",
-    kind: "safe",
-    color: FENCE_COLORS.safe,
-    areaKm2: 9.6,
-    points: [
-      [-6.17, 106.815],
-      [-6.17, 106.825],
-      [-6.178, 106.825],
-      [-6.178, 106.815],
-    ],
-  },
-];
+export function statusLabel(status: string) {
+  return STATUS_LABELS[status] ?? status;
+}
 
-export const SEED_OPERATIONS: Operation[] = [
-  {
-    id: "op-night-watch",
-    name: "Night Watch Alpha",
-    description: "Overnight perimeter recon across Merdeka corridor with dual-group coverage.",
+function authHeaders(): HeadersInit {
+  const session = readSessionId();
+  if (!session) throw new Error("Login required");
+  return { Authorization: `Bearer ${session}` };
+}
+
+async function readError(response: Response) {
+  try {
+    const body = (await response.json()) as { error?: string; detail?: string; message?: string };
+    if (typeof body.detail === "string") return body.detail;
+    if (body.error) return body.error;
+    if (body.message) return body.message;
+  } catch {
+    /* not json */
+  }
+  if (response.status === 401) return "Login required";
+  if (response.status === 403) return "Permission denied";
+  if (response.status === 409) return "Conflict — complete or cancel ACTIVE/ON_HOLD ops before delete";
+  return `Request failed (${response.status})`;
+}
+
+async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, { signal, cache: "no-store", headers: authHeaders() });
+  if (!response.ok) throw new Error(await readError(response));
+  return (await response.json()) as T;
+}
+
+async function sendJson<T>(path: string, method: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  const headers: Record<string, string> = { ...(authHeaders() as Record<string, string>) };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const response = await fetch(path, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
+    cache: "no-store",
+  });
+  if (response.status === 204) return undefined as T;
+  if (!response.ok) throw new Error(await readError(response));
+  return (await response.json()) as T;
+}
+
+export type ListOperationsQuery = {
+  q?: string;
+  status?: string;
+  group_id?: number;
+  start_from?: string;
+  start_to?: string;
+  page?: number;
+  limit?: number;
+};
+
+export function listOperations(query: ListOperationsQuery = {}, signal?: AbortSignal) {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.status) params.set("status", query.status);
+  if (query.group_id != null) params.set("group_id", String(query.group_id));
+  if (query.start_from) params.set("start_from", query.start_from);
+  if (query.start_to) params.set("start_to", query.start_to);
+  if (query.page != null) params.set("page", String(query.page));
+  if (query.limit != null) params.set("limit", String(query.limit));
+  const qs = params.toString();
+  return getJson<OperationListPage>(`/api/operations${qs ? `?${qs}` : ""}`, signal);
+}
+
+export function operationsSummary(signal?: AbortSignal) {
+  return getJson<OperationsSummary>("/api/operations/summary", signal);
+}
+
+export function operationsFilterOptions(signal?: AbortSignal) {
+  return getJson<OperationsFilterOptions>("/api/operations/filters/options", signal);
+}
+
+export function operationGroupOptions(signal?: AbortSignal) {
+  return getJson<{ items: GroupRef[] }>("/api/operations/groups/options", signal);
+}
+
+export function operationPersonnelOptions(q = "", signal?: AbortSignal) {
+  const params = new URLSearchParams();
+  if (q.trim()) params.set("q", q.trim());
+  const qs = params.toString();
+  return getJson<{ items: PersonnelChoice[] }>(
+    `/api/operations/personnel/options${qs ? `?${qs}` : ""}`,
+    signal,
+  );
+}
+
+export function readOperation(id: number, signal?: AbortSignal) {
+  return getJson<OperationDetail>(`/api/operations/${id}`, signal);
+}
+
+export function createOperation(body: CreateOperationBody, signal?: AbortSignal) {
+  return sendJson<OperationDetail>("/api/operations", "POST", body, signal);
+}
+
+export function updateOperation(
+  id: number,
+  body: Partial<Pick<CreateOperationBody, "name" | "description" | "type" | "start_at" | "end_at" | "group_ids" | "geofence_ids">>,
+  signal?: AbortSignal,
+) {
+  return sendJson<OperationDetail>(`/api/operations/${id}`, "PATCH", body, signal);
+}
+
+export function deleteOperation(id: number, signal?: AbortSignal) {
+  return sendJson<void>(`/api/operations/${id}`, "DELETE", undefined, signal);
+}
+
+export function activateOperation(id: number, signal?: AbortSignal) {
+  return sendJson<OperationDetail>(`/api/operations/${id}/activate`, "POST", undefined, signal);
+}
+
+export function holdOperation(id: number, signal?: AbortSignal) {
+  return sendJson<OperationDetail>(`/api/operations/${id}/hold`, "POST", undefined, signal);
+}
+
+export function resumeOperation(id: number, signal?: AbortSignal) {
+  return sendJson<OperationDetail>(`/api/operations/${id}/resume`, "POST", undefined, signal);
+}
+
+export function completeOperation(id: number, signal?: AbortSignal) {
+  return sendJson<OperationDetail>(`/api/operations/${id}/complete`, "POST", undefined, signal);
+}
+
+export function cancelOperation(id: number, signal?: AbortSignal) {
+  return sendJson<OperationDetail>(`/api/operations/${id}/cancel`, "POST", undefined, signal);
+}
+
+export function operationMap(id: number, signal?: AbortSignal) {
+  return getJson<OperationMapPayload>(`/api/operations/${id}/map`, signal);
+}
+
+export function operationAlerts(id: number, signal?: AbortSignal) {
+  return getJson<{ items: OpAlert[] }>(`/api/operations/${id}/alerts`, signal);
+}
+
+export function operationTickets(id: number, signal?: AbortSignal) {
+  return getJson<{ items: OpTicket[] }>(`/api/operations/${id}/tickets`, signal);
+}
+
+export function operationPersonnel(id: number, signal?: AbortSignal) {
+  return getJson<{ items: { soldier_id: number; group_id: number; group_name: string }[] }>(
+    `/api/operations/${id}/personnel`,
+    signal,
+  );
+}
+
+export function operationGroups(id: number, signal?: AbortSignal) {
+  return getJson<{ items: GroupItem[] }>(`/api/operations/${id}/groups`, signal);
+}
+
+export function addOperationGroup(
+  id: number,
+  body: { group_id: number } | { name: string; member_soldier_ids: number[]; leader_soldier_id?: number; description?: string | null },
+  signal?: AbortSignal,
+) {
+  return sendJson<OperationDetail>(`/api/operations/${id}/groups`, "POST", body, signal);
+}
+
+export function removeOperationGroup(id: number, groupId: number, signal?: AbortSignal) {
+  return sendJson<OperationDetail>(`/api/operations/${id}/groups/${groupId}`, "DELETE", undefined, signal);
+}
+
+export function addOperationGeofence(
+  id: number,
+  body:
+    | { geofence_id: number }
+    | {
+        name: string;
+        polygon?: [number, number][];
+        geometry_json?: string;
+        kind?: string | null;
+        color?: string | null;
+        description?: string | null;
+        area_km2?: number;
+      },
+  signal?: AbortSignal,
+) {
+  return sendJson<OperationDetail>(`/api/operations/${id}/geofences`, "POST", body, signal);
+}
+
+export function removeOperationGeofence(id: number, geofenceId: number, signal?: AbortSignal) {
+  return sendJson<OperationDetail>(
+    `/api/operations/${id}/geofences/${geofenceId}`,
+    "DELETE",
+    undefined,
+    signal,
+  );
+}
+
+export function detailCounts(detail: OperationDetail) {
+  return {
+    groups: detail.summary?.group_count ?? detail.counts?.groups ?? detail.groups?.length ?? 0,
+    personnel: detail.summary?.personnel_count ?? detail.counts?.personnel ?? 0,
+    geofences: detail.summary?.geofence_count ?? detail.counts?.geofences ?? detail.geofences?.length ?? 0,
+  };
+}
+
+export function toOpPerson(p: PersonnelChoice): OpPerson {
+  return {
+    id: String(p.soldier_id),
+    label: `S-${p.soldier_id}`,
+    name: p.name || `S-${p.soldier_id}`,
     status: "active",
-    type: "reconnaissance",
-    startAt: "2026-10-06T18:00",
-    endAt: "2026-10-07T06:00",
-    groupIds: ["g-alpha", "g-bravo"],
-    assignments: [
-      { groupId: "g-alpha", groupName: "Alpha", personIds: ["101", "103", "104", "106"], leaderId: "104" },
-      { groupId: "g-bravo", groupName: "Bravo", personIds: ["107", "108", "109"], leaderId: "107" },
-    ],
-    geofenceIds: ["gf-recon", "gf-restricted"],
-    alerts: { total: 3, critical: 1 },
-    tickets: { total: 2, open: 1 },
-    markers: [],
-  },
-  {
-    id: "op-bravo-patrol",
-    name: "Bravo Urban Patrol",
-    description: "Daylight patrol loop covering east sector checkpoints and gateway nodes.",
-    status: "planning",
-    type: "patrol",
-    startAt: "2026-10-08T07:00",
-    endAt: "2026-10-08T15:00",
-    groupIds: ["g-bravo"],
-    assignments: [{ groupId: "g-bravo", groupName: "Bravo", personIds: ["107", "108", "109", "110"], leaderId: "107" }],
-    geofenceIds: ["gf-safe"],
+    position:
+      p.lat != null && p.lon != null ? [p.lat, p.lon] : ([MAP_CENTER[0], MAP_CENTER[1]] as [number, number]),
+  };
+}
+
+export function listItemToOperation(item: OperationListItem): Operation {
+  return {
+    id: item.id,
+    operation_code: item.operation_code,
+    name: item.name,
+    description: item.description ?? "",
+    status: item.status,
+    type: item.type ?? "",
+    startAt: item.start_at,
+    endAt: item.end_at,
+    groupIds: [],
+    assignments: [],
+    geofenceIds: [],
     alerts: { total: 0, critical: 0 },
     tickets: { total: 0, open: 0 },
     markers: [],
-  },
-  {
-    id: "op-gate-secure",
-    name: "Gateway Secure",
-    description: "Completed static security detail for VIP corridor and restricted apron.",
-    status: "completed",
-    type: "security",
-    startAt: "2026-10-04T08:00",
-    endAt: "2026-10-05T20:00",
-    groupIds: ["g-recon", "g-support"],
-    assignments: [
-      { groupId: "g-recon", groupName: "Recon Team", personIds: ["101", "103", "111"], leaderId: "101" },
-      { groupId: "g-support", groupName: "Support Team", personIds: ["106", "110", "112"], leaderId: "106" },
-    ],
-    geofenceIds: ["gf-restricted", "gf-safe"],
-    alerts: { total: 5, critical: 2 },
-    tickets: { total: 4, open: 0 },
-    markers: [],
-  },
-];
+    group_count: item.group_count,
+    personnel_count: item.personnel_count,
+    geofence_count: item.geofence_count,
+  };
+}
 
-export type OperationDraft = {
-  name: string;
-  description: string;
-  startAt: string;
-  endAt: string;
-  type: OperationType;
-  status: OperationStatus;
-  groupIds: string[];
-  assignments: OpAssignment[];
-  geofences: OpGeofence[];
-};
+export function detailToOperation(detail: OperationDetail): Operation {
+  return {
+    id: detail.id,
+    operation_code: detail.operation_code,
+    name: detail.name,
+    description: detail.description ?? "",
+    status: detail.status,
+    type: detail.type ?? "",
+    startAt: detail.start_at,
+    endAt: detail.end_at,
+    groupIds: detail.groups.map((g) => String(g.id)),
+    assignments: detail.groups.map((g) => ({
+      groupId: String(g.id),
+      groupName: g.name,
+      personIds: [],
+      leaderId: g.leader_soldier_id != null ? String(g.leader_soldier_id) : null,
+      existingGroupId: g.id,
+    })),
+    geofenceIds: detail.geofences.map((g) => String(g.id)),
+    alerts: { total: 0, critical: 0 },
+    tickets: { total: 0, open: 0 },
+    markers: [],
+    group_count: detail.summary?.group_count ?? detail.counts?.groups ?? detail.groups.length,
+    personnel_count: detail.summary?.personnel_count ?? detail.counts?.personnel ?? 0,
+    geofence_count: detail.summary?.geofence_count ?? detail.counts?.geofences ?? detail.geofences.length,
+  };
+}
+
+/** Local datetime-local → ISO UTC for BE */
+export function localInputToIso(value: string) {
+  if (!value) return value;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toISOString();
+}
+
+export function isoToLocalInput(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** BE polygon [lng,lat] → Leaflet [lat,lng] */
+export function bePolygonToLatLng(polygon: [number, number][]): [number, number][] {
+  return polygon.map(([lng, lat]) => [lat, lng] as [number, number]);
+}
+
+/** Leaflet [lat,lng] → BE polygon [lng,lat] */
+export function latLngToBePolygon(points: [number, number][]): [number, number][] {
+  return points.map(([lat, lng]) => [lng, lat] as [number, number]);
+}
+
+export function draftToCreateBody(draft: OperationDraft): CreateOperationBody {
+  const existingIds = draft.assignments
+    .map((a) => a.existingGroupId)
+    .filter((id): id is number => id != null);
+  const inlineGroups = draft.assignments
+    .filter((a) => a.existingGroupId == null && a.personIds.length > 0)
+    .map((a) => ({
+      name: a.groupName.trim() || "Group",
+      member_soldier_ids: a.personIds.map((id) => Number(id)).filter((n) => Number.isFinite(n)),
+      ...(a.leaderId != null && Number.isFinite(Number(a.leaderId))
+        ? { leader_soldier_id: Number(a.leaderId) }
+        : {}),
+    }))
+    .filter((g) => g.member_soldier_ids.length > 0);
+
+  const existingFenceIds = draft.geofences
+    .map((g) => g.existingId)
+    .filter((id): id is number => id != null);
+  const newFences = draft.geofences
+    .filter((g) => g.existingId == null && g.points.length >= 3)
+    .map((g) => ({
+      name: g.name.trim() || "Zone",
+      kind: g.kind,
+      color: g.color,
+      polygon: latLngToBePolygon(g.points),
+      area_km2: g.areaKm2,
+    }));
+
+  return {
+    name: draft.name.trim(),
+    description: draft.description.trim() || null,
+    type: typeLabel(draft.type),
+    start_at: localInputToIso(draft.startAt),
+    end_at: localInputToIso(draft.endAt),
+    ...(existingIds.length ? { group_ids: existingIds } : {}),
+    ...(inlineGroups.length ? { groups: inlineGroups } : {}),
+    ...(existingFenceIds.length ? { geofence_ids: existingFenceIds } : {}),
+    ...(newFences.length ? { new_geofences: newFences } : {}),
+  };
+}
+
+export function mapPayloadToMarkers(map: OperationMapPayload): OpMarker[] {
+  return map.positions
+    .filter((p) => p.latitude != null && p.longitude != null)
+    .map((p) => ({
+      id: String(p.soldier_id),
+      label: `S-${p.soldier_id}`,
+      position: [p.latitude as number, p.longitude as number] as [number, number],
+      group: p.group_name ?? undefined,
+      tone: "ok" as const,
+    }));
+}
+
+export function mapPayloadToFences(map: OperationMapPayload): OpGeofence[] {
+  return map.geofences.map((g) => {
+    const kind = (g.kind === "restricted" || g.kind === "safe" ? g.kind : "recon") as FenceKind;
+    const points = bePolygonToLatLng(g.polygon ?? []);
+    return {
+      id: String(g.id),
+      name: g.name,
+      kind,
+      color: g.color || FENCE_COLORS[kind],
+      // Map payload from BE is id/name/polygon only — estimate area client-side.
+      areaKm2: estimatePolygonAreaKm2(points),
+      points,
+      existingId: g.id,
+    };
+  });
+}
 
 export function emptyDraft(): OperationDraft {
   const now = new Date();
@@ -243,29 +644,9 @@ export function emptyDraft(): OperationDraft {
     startAt: toLocal(now),
     endAt: toLocal(end),
     type: "reconnaissance",
-    status: "planning",
     groupIds: [],
     assignments: [],
     geofences: [],
-  };
-}
-
-export function draftFromOperation(op: Operation, catalog: OpGeofence[]): OperationDraft {
-  return {
-    name: op.name,
-    description: op.description,
-    startAt: op.startAt,
-    endAt: op.endAt,
-    type: op.type,
-    status: op.status,
-    groupIds: [...op.groupIds],
-    assignments: op.assignments.map((a) => ({
-      groupId: a.groupId,
-      groupName: a.groupName,
-      personIds: [...a.personIds],
-      leaderId: a.leaderId,
-    })),
-    geofences: catalog.filter((g) => op.geofenceIds.includes(g.id)).map((g) => ({ ...g, points: [...g.points] })),
   };
 }
 
@@ -281,17 +662,8 @@ export function formatOpRange(startAt: string, endAt: string) {
   return `${fmt(startAt)} — ${fmt(endAt)}`;
 }
 
-export function typeLabel(type: OperationType) {
+export function typeLabel(type: OperationType | string) {
   return OPERATION_TYPES.find((item) => item.id === type)?.label ?? type;
-}
-
-export function personnelTotals(groupIds: string[], groups: OpGroup[]) {
-  const selected = groups.filter((g) => groupIds.includes(g.id));
-  return {
-    total: selected.reduce((sum, g) => sum + g.personnel, 0),
-    online: selected.reduce((sum, g) => sum + g.online, 0),
-    groups: selected,
-  };
 }
 
 export function assignmentPersonCount(assignments: OpAssignment[]) {
@@ -304,18 +676,18 @@ export function assignedPersonIds(assignments: OpAssignment[]) {
 
 export function resolveAssignments(
   assignments: OpAssignment[],
-  people: OpPerson[] = MAP_SOLDIERS,
-  groups: OpGroup[] = SEED_GROUPS,
+  people: OpPerson[],
+  groups: OpGroup[] = [],
 ) {
   return assignments.map((assignment) => {
     const preset = groups.find((g) => g.id === assignment.groupId);
-    const group = {
+    const group: OpGroup = {
       id: assignment.groupId,
       name: assignment.groupName || preset?.name || "Group",
       personnel: assignment.personIds.length,
       online: 0,
       leader: "",
-      status: preset?.status ?? ("active" as const),
+      status: preset?.status ?? "active",
     };
     const members = people.filter((p) => assignment.personIds.includes(p.id));
     const leader = people.find((p) => p.id === assignment.leaderId) ?? members[0] ?? null;
@@ -325,10 +697,18 @@ export function resolveAssignments(
   });
 }
 
-export function markersFromAssignments(
-  assignments: OpAssignment[],
-  people: OpPerson[] = MAP_SOLDIERS,
-): OpMarker[] {
+export function mapSoldierMarkers(people: OpPerson[]): OpMarker[] {
+  return people.map((person) => ({
+    id: person.id,
+    label: person.label,
+    position: person.position,
+    role: person.role === "danru" ? ("danru" as const) : undefined,
+    tone:
+      person.status === "critical" ? ("critical" as const) : person.status === "standby" ? ("idle" as const) : ("ok" as const),
+  }));
+}
+
+export function markersFromAssignments(assignments: OpAssignment[], people: OpPerson[]): OpMarker[] {
   return resolveAssignments(assignments, people).flatMap((item) =>
     item.members.map((person) => ({
       id: person.id,
@@ -344,20 +724,6 @@ export function markersFromAssignments(
             : ("ok" as const),
     })),
   );
-}
-
-// Resolve seed markers after helpers exist
-for (const op of SEED_OPERATIONS) {
-  op.markers = markersFromAssignments(op.assignments);
-}
-
-export function geofenceTotals(geofenceIds: string[], catalog: OpGeofence[]) {
-  const selected = catalog.filter((g) => geofenceIds.includes(g.id));
-  return {
-    count: selected.length,
-    areaKm2: Math.round(selected.reduce((sum, g) => sum + g.areaKm2, 0) * 10) / 10,
-    items: selected,
-  };
 }
 
 export function estimatePolygonAreaKm2(points: [number, number][]) {
@@ -388,75 +754,4 @@ export function circleToPolygon(center: [number, number], radiusM: number, steps
     ]);
   }
   return points;
-}
-
-export function createOperationFromDraft(
-  draft: OperationDraft,
-  existingMarkers: OpMarker[] = [],
-): { operation: Operation; geofences: OpGeofence[] } {
-  const id = `op-${Date.now().toString(36)}`;
-  const geofences = draft.geofences.map((g) => ({
-    ...g,
-    id: g.id.startsWith("gf-new-") || g.id.startsWith("gf-") ? g.id : `gf-${Date.now().toString(36)}`,
-  }));
-  const assignments = draft.assignments
-    .filter((a) => a.personIds.length > 0)
-    .map((a) => ({
-      groupId: a.groupId,
-      groupName: a.groupName.trim() || "Group",
-      personIds: [...a.personIds],
-      leaderId: a.leaderId ?? a.personIds[0] ?? null,
-    }));
-  const groupIds = assignments.map((a) => a.groupId);
-  const markers = existingMarkers.length > 0 ? existingMarkers : markersFromAssignments(assignments);
-
-  return {
-    geofences,
-    operation: {
-      id,
-      name: draft.name.trim() || "Untitled Operation",
-      description: draft.description.trim() || "No description provided.",
-      status: draft.status,
-      type: draft.type,
-      startAt: draft.startAt,
-      endAt: draft.endAt,
-      groupIds,
-      assignments,
-      geofenceIds: geofences.map((g) => g.id),
-      alerts: { total: 0, critical: 0 },
-      tickets: { total: 0, open: 0 },
-      markers,
-    },
-  };
-}
-
-export function applyDraftToOperation(
-  op: Operation,
-  draft: OperationDraft,
-): { operation: Operation; geofences: OpGeofence[] } {
-  const geofences = draft.geofences.map((g) => ({ ...g, points: [...g.points] as [number, number][] }));
-  const assignments = draft.assignments
-    .filter((a) => a.personIds.length > 0)
-    .map((a) => ({
-      groupId: a.groupId,
-      groupName: a.groupName.trim() || "Group",
-      personIds: [...a.personIds],
-      leaderId: a.leaderId ?? a.personIds[0] ?? null,
-    }));
-  return {
-    geofences,
-    operation: {
-      ...op,
-      name: draft.name.trim() || op.name,
-      description: draft.description.trim() || op.description,
-      status: draft.status,
-      type: draft.type,
-      startAt: draft.startAt,
-      endAt: draft.endAt,
-      groupIds: assignments.map((a) => a.groupId),
-      assignments,
-      geofenceIds: geofences.map((g) => g.id),
-      markers: markersFromAssignments(assignments),
-    },
-  };
 }
