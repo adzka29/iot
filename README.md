@@ -13,7 +13,7 @@ cp .env.example .env.local
 | `EXPLORER_API_BASE` | server only | Upstream Nest API for `/api/*` proxies |
 
 - Local: `http://127.0.0.1:8000` (see `.env.example` / `.env.local`)
-- Production: `.env.production` → [be-trackforge Railway](https://be-trackforge-production-87d3.up.railway.app)
+- Production: `.env.production` → [be-iot Railway](https://be-iot-production.up.railway.app)
 - FE deploy: [iot-production Railway](https://iot-production-6e48.up.railway.app)
 
 Also set `EXPLORER_API_BASE` in the Railway/Vercel project env if the host does not load `.env.production`.
