@@ -633,7 +633,7 @@
 .cmd-matches-list {
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 6px;
   min-height: 0;
   overflow: auto;
   padding-right: 2px;
@@ -641,11 +641,11 @@
 
 .cmd-match {
   display: grid;
-  gap: 2px;
-  padding: 9px 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 176, 214, 0.22);
-  background: rgba(8, 16, 30, 0.32);
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 176, 214, 0.2);
+  background: rgba(8, 16, 30, 0.28);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -656,10 +656,22 @@
   background: rgba(16, 28, 48, 0.48);
 }
 
+.cmd-match-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .cmd-match b {
+  min-width: 0;
+  flex: 1;
   color: #f3f7fd;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 720;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cmd-match p {
@@ -671,37 +683,31 @@
   text-overflow: ellipsis;
 }
 
-.cmd-match-foot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.cmd-match-foot em {
-  font-size: 11px;
+.cmd-match-top em {
+  flex: none;
+  font-size: 10px;
   font-style: normal;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-.cmd-match-foot em.is-critical {
-  color: #f87171;
-}
-
-.cmd-match-foot em.is-warning,
-.cmd-match-foot em.is-medium {
-  color: #facc15;
-}
-
-.cmd-match-foot em.is-info {
   color: #93c5fd;
 }
 
-.cmd-match-foot time {
-  color: #d5e2f2;
-  font-size: 12px;
+.cmd-match-top em.is-critical { color: #f87171; }
+.cmd-match-top em.is-warning,
+.cmd-match-top em.is-medium { color: #facc15; }
+.cmd-match-top em.is-info,
+.cmd-match-top em.is-telemetry { color: #93c5fd; }
+.cmd-match-top em.is-mesh { color: #67e8f9; }
+.cmd-match-top em.is-uplink { color: #c4b5fd; }
+.cmd-match-top em.is-beacon { color: #86efac; }
+.cmd-match-top em.is-system { color: #cbd5e1; }
+.cmd-match-top em.is-special { color: #fdba74; }
+
+.cmd-match-top time {
+  flex: none;
+  color: #9fb3cc;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1411,6 +1417,48 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.cmd-stats.is-overview {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.cmd-stats.is-overview .cmd-stat {
+  padding: 10px 12px;
+}
+
+.cmd-stats.is-overview .cmd-stat.has-chart {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 42%);
+  align-items: center;
+  gap: 12px;
+}
+
+.cmd-stat-copy {
+  min-width: 0;
+}
+
+.cmd-stats.is-overview .cmd-stat strong {
+  font-size: 18px;
+  font-weight: 720;
+  margin-top: 6px;
+}
+
+.cmd-stats.is-overview .cmd-stat span {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.cmd-stats.is-overview .cmd-stat small {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.cmd-spark {
+  width: 100%;
+  height: 44px;
+  display: block;
+}
+
 .cmd-stat,
 .cmd-events {
   min-width: 0;
@@ -1575,62 +1623,339 @@
   font-size: 10px;
 }
 
-.cmd-reports {
+.cmd-report-builder {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  padding: 8px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.cmd-reports h3 {
-  margin: 0 0 6px;
-  color: var(--faint);
-  font-size: 10px;
-  font-weight: 650;
-}
-
-.cmd-reports ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-
-.cmd-reports li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: center;
-  padding: 8px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  overflow: hidden;
 }
 
-.cmd-reports li:last-child {
-  border-bottom: 0;
+.cmd-report-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 2px;
 }
 
-.cmd-report-body {
+.cmd-report-block h3 {
+  margin: 0 0 8px;
+  color: #d7e4f5;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cmd-report-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.cmd-report-section {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
+  width: 100%;
+  padding: 9px 26px 9px 9px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(10, 18, 32, 0.82);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cmd-report-section:hover {
+  border-color: rgba(148, 176, 214, 0.3);
+}
+
+.cmd-report-section.is-active {
+  border-color: rgba(59, 130, 246, 0.72);
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.14), rgba(10, 18, 32, 0.9));
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.14);
+}
+
+.cmd-report-section-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  border: 1px solid rgba(148, 176, 214, 0.14);
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.cmd-report-section.is-blue .cmd-report-section-icon {
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.28);
+}
+
+.cmd-report-section.is-amber .cmd-report-section-icon {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.cmd-report-section.is-cyan .cmd-report-section-icon {
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.12);
+  border-color: rgba(34, 211, 238, 0.26);
+}
+
+.cmd-report-section.is-slate .cmd-report-section-icon {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+.cmd-report-section.is-rose .cmd-report-section-icon {
+  color: #fb7185;
+  background: rgba(244, 63, 94, 0.14);
+  border-color: rgba(244, 63, 94, 0.26);
+}
+
+.cmd-report-section.is-violet .cmd-report-section-icon {
+  color: #a78bfa;
+  background: rgba(139, 92, 246, 0.14);
+  border-color: rgba(139, 92, 246, 0.28);
+}
+
+.cmd-report-section-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.cmd-report-section-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.cmd-report-section-copy strong {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f3f7fd;
+  line-height: 1.25;
+}
+
+.cmd-report-section-copy small {
+  color: #9fb3cc;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.cmd-report-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.7);
+  color: white;
+  display: grid;
+  place-items: center;
+}
+
+.cmd-report-check.is-on {
+  border-color: transparent;
+  background: #2563eb;
+}
+
+.cmd-report-check svg {
+  width: 11px;
+  height: 11px;
+}
+
+.cmd-report-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.cmd-report-fields label {
+  display: grid;
+  gap: 5px;
   min-width: 0;
 }
 
-.cmd-report-body strong {
-  display: block;
-  font-size: 11px;
+.cmd-report-fields label > span {
+  color: #9fb3cc;
+  font-size: 10px;
   font-weight: 650;
 }
 
-.cmd-report-body p,
-.cmd-report-body small {
-  margin: 2px 0 0;
-  color: var(--muted);
+.cmd-report-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(8, 15, 28, 0.9);
+}
+
+.cmd-report-select svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-right: 6px;
+  color: #93c5fd;
+}
+
+.cmd-report-select select {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, #8ea3bf 50%) calc(100% - 10px) / 5px 5px no-repeat,
+    linear-gradient(135deg, #8ea3bf 50%, transparent 50%) calc(100% - 5px) / 5px 5px no-repeat,
+    transparent;
+  color: #e8f0fb;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cmd-report-select select option {
+  color: #0b1524;
+}
+
+.cmd-report-toggles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.cmd-report-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  color: #d5e2f2;
   font-size: 10px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.cmd-report-toggle span {
+  min-width: 0;
+}
+
+.cmd-report-toggle button {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.45);
+  cursor: pointer;
+  padding: 0;
+}
+
+.cmd-report-toggle button.is-on {
+  background: #2563eb;
+}
+
+.cmd-report-toggle button i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  transition: left 0.15s ease;
+}
+
+.cmd-report-toggle button.is-on i {
+  left: 18px;
+}
+
+.cmd-report-actions {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.cmd-report-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cmd-report-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.cmd-report-btn.is-ghost {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.55);
+  color: #e2e8f0;
+}
+
+.cmd-report-btn.is-ghost:hover {
+  border-color: rgba(186, 210, 245, 0.42);
+  background: rgba(16, 28, 46, 0.9);
+}
+
+.cmd-report-btn.is-primary {
+  border: 1px solid #2563eb;
+  background: linear-gradient(180deg, #3b82f6, #2563eb);
+  color: white;
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.24);
+}
+
+.cmd-report-btn.is-primary:hover {
+  filter: brightness(1.05);
+}
+
+.cmd-report-note {
+  flex: none;
+  margin: 0;
+  color: #8fa3bb;
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .cmd-report-sections,
+  .cmd-report-fields,
+  .cmd-report-toggles {
+    grid-template-columns: 1fr;
+  }
 }
 
 .cmd-history {

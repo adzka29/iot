@@ -339,10 +339,10 @@ export default function AccessView() {
               <UserTable rows={users} selectedId={selectedIdentity} loading={loading} onSelect={(id) => { setSelectedIdentity(id); setComposer(null); setEditing(false); }} />
               <footer className="ua-foot">
                 Showing {userTotal ? (page - 1) * 20 + 1 : 0}-{Math.min(page * 20, userTotal)} of {userTotal} identities
-                <span>
+                            <span>
                   <button type="button" className="ua-ghost" disabled={page <= 1} onClick={() => setPage(page - 1)}>‹</button>
                   <button type="button" className="ua-ghost" disabled={page >= pages} onClick={() => setPage(page + 1)}>›</button>
-                </span>
+                            </span>
               </footer>
             </section>
             {composer === "user" || editing ? (

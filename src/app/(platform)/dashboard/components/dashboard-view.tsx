@@ -10,7 +10,7 @@ import { categoryLabel, entityLabel, listExplorer, recordSummary, type ExplorerR
 const OpsMap = dynamic(() => import("./ops-map"), { ssr: false });
 const HistoryMiniMap = dynamic(() => import("./history-mini-map"), { ssr: false });
 
-type Tab = "History" | "Events" | "Alerts" | "Reports";
+type Tab = "Overview" | "History" | "Events" | "Alerts" | "Reports";
 
 type SoldierAlert = {
   id: string;
@@ -140,11 +140,9 @@ const dossiers: Record<string, Dossier> = {
     gnss: "±6 m",
     seen: "1 minute ago",
     overview: [
-      { label: "Heart Rate", value: "74 bpm", note: "Resting", tone: "ok" },
-      { label: "HRV", value: "54 ms", note: "Steady", tone: "ok" },
-      { label: "Battery", value: "91%", note: "About 9 h left", tone: "ok" },
-      { label: "Device", value: "Online", note: "Link stable", tone: "ok" },
-      { label: "Chest Strap", value: "Connected", note: "Signal strong", tone: "ok" },
+      { label: "Heart Rate", value: "74 bpm", note: "Normal", tone: "ok" },
+      { label: "HRV", value: "54 ms", note: "Normal", tone: "ok" },
+      { label: "Battery", value: "91%", note: "Good", tone: "ok" },
     ],
     vitals: [
       { label: "Heart Rate", value: "74 bpm", note: "Resting range", tone: "ok" },
@@ -173,11 +171,9 @@ const dossiers: Record<string, Dossier> = {
     gnss: "±7 m",
     seen: "2 minutes ago",
     overview: [
-      { label: "Heart Rate", value: "81 bpm", note: "Normal", tone: "ok" },
-      { label: "HRV", value: "47 ms", note: "Steady", tone: "ok" },
-      { label: "Battery", value: "77%", note: "About 6 h left", tone: "ok" },
-      { label: "Device", value: "Online", note: "Link stable", tone: "ok" },
-      { label: "Chest Strap", value: "Connected", note: "Signal strong", tone: "ok" },
+      { label: "Heart Rate", value: "82 bpm", note: "Normal", tone: "ok" },
+      { label: "HRV", value: "46 ms", note: "Normal", tone: "ok" },
+      { label: "Battery", value: "78%", note: "Good", tone: "ok" },
     ],
     vitals: [
       { label: "Heart Rate", value: "81 bpm", note: "Normal", tone: "ok" },
@@ -208,9 +204,7 @@ const dossiers: Record<string, Dossier> = {
     overview: [
       { label: "Heart Rate", value: "118 bpm", note: "Elevated", tone: "bad" },
       { label: "HRV", value: "28 ms", note: "Low", tone: "warn" },
-      { label: "Battery", value: "64%", note: "About 3 h left", tone: "warn" },
-      { label: "Device", value: "Online", note: "SOS beacon on", tone: "bad" },
-      { label: "Chest Strap", value: "Connected", note: "Signal strong", tone: "ok" },
+      { label: "Battery", value: "64%", note: "Fair", tone: "warn" },
     ],
     vitals: [
       { label: "Heart Rate", value: "118 bpm", note: "Above baseline", tone: "bad" },
@@ -241,9 +235,7 @@ const dossiers: Record<string, Dossier> = {
     overview: [
       { label: "Heart Rate", value: "97 bpm", note: "High", tone: "warn" },
       { label: "HRV", value: "31 ms", note: "Low", tone: "warn" },
-      { label: "Battery", value: "22%", note: "Replace soon", tone: "bad" },
-      { label: "Device", value: "Online", note: "Link weak", tone: "warn" },
-      { label: "Chest Strap", value: "Intermittent", note: "Signal dropping", tone: "warn" },
+      { label: "Battery", value: "22%", note: "Low", tone: "bad" },
     ],
     vitals: [
       { label: "Heart Rate", value: "97 bpm", note: "Above baseline", tone: "warn" },
@@ -272,11 +264,9 @@ const dossiers: Record<string, Dossier> = {
     gnss: "±5 m",
     seen: "Just now",
     overview: [
-      { label: "Heart Rate", value: "76 bpm", note: "Resting", tone: "ok" },
-      { label: "HRV", value: "51 ms", note: "Steady", tone: "ok" },
-      { label: "Battery", value: "83%", note: "About 7 h left", tone: "ok" },
-      { label: "Device", value: "Online", note: "Link stable", tone: "ok" },
-      { label: "Chest Strap", value: "Connected", note: "Signal strong", tone: "ok" },
+      { label: "Heart Rate", value: "76 bpm", note: "Normal", tone: "ok" },
+      { label: "HRV", value: "51 ms", note: "Normal", tone: "ok" },
+      { label: "Battery", value: "83%", note: "Good", tone: "ok" },
     ],
     vitals: [
       { label: "Heart Rate", value: "76 bpm", note: "Resting", tone: "ok" },
@@ -306,10 +296,8 @@ const dossiers: Record<string, Dossier> = {
     seen: "3 minutes ago",
     overview: [
       { label: "Heart Rate", value: "79 bpm", note: "Normal", tone: "ok" },
-      { label: "HRV", value: "49 ms", note: "Steady", tone: "ok" },
-      { label: "Battery", value: "88%", note: "About 8 h left", tone: "ok" },
-      { label: "Device", value: "Online", note: "Link stable", tone: "ok" },
-      { label: "Chest Strap", value: "Connected", note: "Signal strong", tone: "ok" },
+      { label: "HRV", value: "49 ms", note: "Normal", tone: "ok" },
+      { label: "Battery", value: "88%", note: "Good", tone: "ok" },
     ],
     vitals: [
       { label: "Heart Rate", value: "79 bpm", note: "Normal", tone: "ok" },
@@ -339,10 +327,8 @@ const dossiers: Record<string, Dossier> = {
     seen: "2 minutes ago",
     overview: [
       { label: "Heart Rate", value: "84 bpm", note: "Normal", tone: "ok" },
-      { label: "HRV", value: "44 ms", note: "Steady", tone: "ok" },
-      { label: "Battery", value: "70%", note: "About 5 h left", tone: "ok" },
-      { label: "Device", value: "Online", note: "Link stable", tone: "ok" },
-      { label: "Chest Strap", value: "Connected", note: "Signal strong", tone: "ok" },
+      { label: "HRV", value: "44 ms", note: "Normal", tone: "ok" },
+      { label: "Battery", value: "70%", note: "Good", tone: "ok" },
     ],
     vitals: [
       { label: "Heart Rate", value: "84 bpm", note: "Light activity", tone: "ok" },
@@ -367,13 +353,70 @@ const dossiers: Record<string, Dossier> = {
   },
 };
 
-function Stat({ label, value, note, tone }: Reading) {
-  const long = value.length > 12;
+function toneColor(tone: Tone) {
+  if (tone === "ok") return "#4ade80";
+  if (tone === "warn") return "#fbbf24";
+  return "#f87171";
+}
+
+function sparkSeries(label: string, value: string, tone: Tone): number[] {
+  const base = Number.parseFloat(value) || 50;
+  const seed = Math.round(base * 17 + label.length * 13);
+  const count = 28;
+  const points: number[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const t = i / (count - 1);
+    const wobble = ((seed * (i + 3)) % 11) / 11;
+    let y = 0.45 + wobble * 0.22;
+    if (label === "Heart Rate") {
+      y = 0.35 + Math.sin(t * Math.PI * 4 + seed) * 0.12 + wobble * 0.18;
+      if (tone === "bad") y += t * 0.28;
+      else if (tone === "warn") y += t * 0.12;
+    } else if (label === "HRV") {
+      y = 0.55 + Math.sin(t * Math.PI * 3 + seed * 0.2) * 0.16 + wobble * 0.1;
+      if (tone !== "ok") y -= t * 0.28;
+    } else {
+      y = 0.78 - t * (tone === "bad" ? 0.55 : tone === "warn" ? 0.32 : 0.12) + wobble * 0.06;
+    }
+    points.push(Math.max(0.08, Math.min(0.92, y)));
+  }
+  return points;
+}
+
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  const width = 120;
+  const height = 44;
+  const step = values.length > 1 ? width / (values.length - 1) : width;
+  const coords = values.map((v, i) => `${(i * step).toFixed(2)},${(height - v * height).toFixed(2)}`);
+  const line = coords.join(" ");
+  const area = `0,${height} ${line} ${width},${height}`;
   return (
-    <div className={`cmd-stat is-${tone}`}>
-      <span>{label}</span>
-      <strong className={long ? "is-long" : ""}>{value}</strong>
-      <small>{note}</small>
+    <svg className="cmd-spark" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
+      <polygon points={area} fill={color} opacity="0.14" />
+      <polyline points={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function Stat({ label, value, note, tone, chart = false }: Reading & { chart?: boolean }) {
+  const long = value.length > 12;
+  if (!chart) {
+    return (
+      <div className={`cmd-stat is-${tone}`}>
+        <span>{label}</span>
+        <strong className={long ? "is-long" : ""}>{value}</strong>
+        <small>{note}</small>
+      </div>
+    );
+  }
+  return (
+    <div className={`cmd-stat is-${tone} has-chart`}>
+      <div className="cmd-stat-copy">
+        <span>{label}</span>
+        <strong className={long ? "is-long" : ""}>{value}</strong>
+        <small>{note}</small>
+      </div>
+      <Sparkline values={sparkSeries(label, value, tone)} color={toneColor(tone)} />
     </div>
   );
 }
@@ -736,8 +779,8 @@ function RecentMatches({ onSelect }: { onSelect: (id: string, source: MatchSourc
     setRows([]);
     const load =
       source === "alerts"
-        ? listAlerts({ limit: 12 }, controller.signal).then((list) => list.items.map(alertMatch))
-        : listExplorer({ limit: 12 }, controller.signal).then((list) => list.items.map(explorerMatch));
+        ? listAlerts({ limit: 24 }, controller.signal).then((list) => list.items.map(alertMatch))
+        : listExplorer({ limit: 24 }, controller.signal).then((list) => list.items.map(explorerMatch));
     load
       .then((items) => {
         if (controller.signal.aborted) return;
@@ -791,20 +834,20 @@ function RecentMatches({ onSelect }: { onSelect: (id: string, source: MatchSourc
           <button
             key={match.key}
             type="button"
-            className="cmd-match"
+            className={`cmd-match is-${match.severity.toLowerCase()}`}
             onClick={() => {
               if (match.soldierId && starterMarkers.some((marker) => marker.id === match.soldierId)) {
                 onSelect(match.soldierId, source);
               }
             }}
           >
-            <b>{match.title}</b>
-            <p>{match.route}</p>
-            <p>{match.detail}</p>
-            <span className="cmd-match-foot">
+            <span className="cmd-match-top">
+              <b>{match.title}</b>
               <em className={`is-${match.severity.toLowerCase()}`}>{match.severity}</em>
               <time>{match.time}</time>
             </span>
+            <p>{match.route}</p>
+            <p>{match.detail}</p>
           </button>
         ))}
       </div>
@@ -841,8 +884,214 @@ function KillChainBar() {
   );
 }
 
+type ReportSectionId = "overview" | "alerts" | "history" | "events" | "vitals" | "equipment";
+
+const REPORT_SECTIONS: {
+  id: ReportSectionId;
+  title: string;
+  note: string;
+  tone: "blue" | "amber" | "cyan" | "slate" | "rose" | "violet";
+  icon: "person" | "alert" | "path" | "list" | "heart" | "gear";
+}[] = [
+  { id: "overview", title: "Overview", note: "Soldier identity, current status, device status, last known position.", tone: "blue", icon: "person" },
+  { id: "alerts", title: "Alerts", note: "All alerts and incidents involving this soldier.", tone: "amber", icon: "alert" },
+  { id: "history", title: "History", note: "Movement history and position records with map.", tone: "cyan", icon: "path" },
+  { id: "events", title: "Events", note: "System and device events (telemetry, status changes, etc).", tone: "slate", icon: "list" },
+  { id: "vitals", title: "Vitals (Optional)", note: "Heart rate, HRV and other vital signs data.", tone: "rose", icon: "heart" },
+  { id: "equipment", title: "Equipment (Optional)", note: "Device information (shoulder hub, chest strap, battery, etc).", tone: "violet", icon: "gear" },
+];
+
+function ReportSectionIcon({ name }: { name: (typeof REPORT_SECTIONS)[number]["icon"] }) {
+  if (name === "person") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="8" r="3.2" fill="currentColor" />
+        <path d="M5.4 19.2c1.2-3.3 3.5-4.9 6.6-4.9s5.4 1.6 6.6 4.9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === "alert") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 4.2 20.2 19H3.8L12 4.2Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        <path d="M12 10v4.2M12 16.8h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === "path") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="6.5" cy="17.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+        <circle cx="17.5" cy="6.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+        <path d="M8.2 15.8 15.8 8.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === "list") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M8 7h11M8 12h11M8 17h11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        <circle cx="4.5" cy="7" r="1.1" fill="currentColor" />
+        <circle cx="4.5" cy="12" r="1.1" fill="currentColor" />
+        <circle cx="4.5" cy="17" r="1.1" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (name === "heart") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 19s-6.5-4.1-8.4-7.5C2.2 9.2 3.4 6.5 6.1 6.1c1.5-.2 2.9.5 3.9 1.6L12 9.8l2-2.1c1-1.1 2.4-1.8 3.9-1.6 2.7.4 3.9 3.1 2.5 5.4C18.5 14.9 12 19 12 19Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+        <path d="M4.8 12.2h3.2l1.6-2.4 2.2 4.6 1.5-2.2h2.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.1" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M12 3.6v2.2M12 18.2v2.2M3.6 12h2.2M18.2 12h2.2M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ReportConfig({ soldierId }: { soldierId: string }) {
+  const [sections, setSections] = useState<Record<ReportSectionId, boolean>>({
+    overview: true,
+    alerts: true,
+    history: true,
+    events: false,
+    vitals: false,
+    equipment: false,
+  });
+  const [format, setFormat] = useState("pdf");
+  const [detail, setDetail] = useState("standard");
+  const [options, setOptions] = useState({
+    maps: true,
+    timestamps: true,
+    raw: true,
+    source: true,
+  });
+
+  function toggleSection(id: ReportSectionId) {
+    setSections((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  function toggleOption(key: keyof typeof options) {
+    setOptions((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  return (
+    <div className="cmd-report-builder">
+      <div className="cmd-report-scroll">
+        <section className="cmd-report-block" aria-labelledby="cmd-report-sections">
+          <h3 id="cmd-report-sections">Include Sections</h3>
+          <div className="cmd-report-sections">
+            {REPORT_SECTIONS.map((section) => {
+              const checked = sections[section.id];
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  className={`cmd-report-section is-${section.tone}${checked ? " is-active" : ""}`}
+                  aria-pressed={checked}
+                  onClick={() => toggleSection(section.id)}
+                >
+                  <span className="cmd-report-section-icon">
+                    <ReportSectionIcon name={section.icon} />
+                  </span>
+                  <span className="cmd-report-section-copy">
+                    <strong>{section.title}</strong>
+                    <small>{section.note}</small>
+                  </span>
+                  <span className={`cmd-report-check${checked ? " is-on" : ""}`} aria-hidden="true">
+                    {checked ? (
+                      <svg viewBox="0 0 16 16" fill="none">
+                        <path d="m3.6 8.2 2.8 2.8 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="cmd-report-block" aria-labelledby="cmd-report-output">
+          <h3 id="cmd-report-output">Output Settings</h3>
+          <div className="cmd-report-fields">
+            <label>
+              <span>Format</span>
+              <div className="cmd-report-select">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M7 3.5h7.2L19 8.3V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1-1.5Z" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="M14 3.6V8h4.5" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                </svg>
+                <select value={format} onChange={(event) => setFormat(event.target.value)} aria-label="Report format">
+                  <option value="pdf">PDF (Recommended)</option>
+                  <option value="csv">CSV</option>
+                  <option value="json">JSON</option>
+                </select>
+              </div>
+            </label>
+            <label>
+              <span>Detail Level</span>
+              <div className="cmd-report-select">
+                <select value={detail} onChange={(event) => setDetail(event.target.value)} aria-label="Detail level">
+                  <option value="summary">Summary</option>
+                  <option value="standard">Standard</option>
+                  <option value="full">Full</option>
+                </select>
+              </div>
+            </label>
+          </div>
+          <div className="cmd-report-toggles">
+            {(
+              [
+                ["maps", "Include map visualizations"],
+                ["timestamps", "Include timestamps"],
+                ["raw", "Include raw data summary"],
+                ["source", "Include position source"],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="cmd-report-toggle">
+                <span>{label}</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={options[key]}
+                  className={options[key] ? "is-on" : ""}
+                  onClick={() => toggleOption(key)}
+                >
+                  <i />
+                </button>
+              </label>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <div className="cmd-report-actions">
+        <button type="button" className="cmd-report-btn is-ghost">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M2.8 12s3.4-6.2 9.2-6.2S21.2 12 21.2 12s-3.4 6.2-9.2 6.2S2.8 12 2.8 12Z" stroke="currentColor" strokeWidth="1.6" />
+            <circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+          Preview Report
+        </button>
+        <button type="button" className="cmd-report-btn is-primary">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 3.5h7.2L19 8.3V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1-1.5Z" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M14 3.6V8h4.5M12 11.2v6M9 14.2h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Generate Report
+        </button>
+      </div>
+      <p className="cmd-report-note">Soldier {soldierId}</p>
+    </div>
+  );
+}
+
 export default function DashboardView() {
-  const [tab, setTab] = useState<Tab>("History");
+  const [tab, setTab] = useState<Tab>("Overview");
   const [selected, setSelected] = useState("104");
   const [cardOpen, setCardOpen] = useState(true);
   const [liveAlerts, setLiveAlerts] = useState<SoldierAlert[]>([]);
@@ -852,7 +1101,7 @@ export default function DashboardView() {
     setSelected(id);
     const item = starterMarkers.find((entry) => entry.id === id);
     setCardOpen(item?.kind === "person");
-    setTab(source === "explorer" ? "Events" : source === "alerts" ? "Alerts" : "History");
+    setTab(source === "explorer" ? "Events" : source === "alerts" ? "Alerts" : "Overview");
   }
 
   useEffect(() => {
@@ -925,7 +1174,7 @@ export default function DashboardView() {
               </div>
               <div className="cmd-card-main">
                 <div className="cmd-tabs">
-                  {(["History", "Events", "Alerts", "Reports"] as Tab[]).map((item) => (
+                  {(["Overview", "History", "Events", "Alerts", "Reports"] as Tab[]).map((item) => (
                     <button key={item} type="button" className={tab === item ? "is-active" : ""} onClick={() => setTab(item)}>
                       {item}
                     </button>
@@ -935,6 +1184,13 @@ export default function DashboardView() {
                   </button>
                 </div>
                 <div className={`cmd-card-scroll${tab === "Events" || tab === "History" || tab === "Reports" || tab === "Alerts" ? " is-events" : ""}`}>
+                  {tab === "Overview" ? (
+                    <div className="cmd-stats is-overview">
+                      {dossier.overview.map((item) => (
+                        <Stat key={item.label} {...item} chart />
+                      ))}
+                    </div>
+                  ) : null}
                   {tab === "History" ? (
                     <HistoryList soldierId={marker.label} items={buildHistory(marker.label, marker.position)} />
                   ) : null}
@@ -944,33 +1200,7 @@ export default function DashboardView() {
                   {tab === "Alerts" ? (
                     <AlertList soldierId={marker.label} items={liveAlerts} />
                   ) : null}
-                  {tab === "Reports" ? (
-                    <div className="cmd-reports">
-                      <h3>Reports</h3>
-                      <ul>
-                        {[
-                          { time: "14:20", title: "Incident summary", note: "SOS + elevated HR window" },
-                          { time: "13:55", title: "Movement report", note: "Last 2 km patrol leg" },
-                          { time: "12:40", title: "Device health", note: "Battery and strap status" },
-                          { time: "11:10", title: "Shift handover", note: "Sector watch notes" },
-                        ].map((report) => (
-                          <li key={`${report.time}-${report.title}`}>
-                            <div className="cmd-report-body">
-                              <strong>{report.title}</strong>
-                              <p>{report.note}</p>
-                              <small>{report.time} · Soldier {marker.label}</small>
-                            </div>
-                            <Link
-                              href={`/explorer?q=${encodeURIComponent(`P-${marker.label}`)}`}
-                              className="cmd-event-detail"
-                            >
-                              View Detail
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
+                  {tab === "Reports" ? <ReportConfig soldierId={marker.label} /> : null}
                 </div>
               </div>
             </article>
