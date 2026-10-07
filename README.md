@@ -2,6 +2,22 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+Copy env for local Nest (`be-nest` on port 8000):
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Where | Purpose |
+|----------|--------|---------|
+| `EXPLORER_API_BASE` | server only | Upstream Nest API for `/api/*` proxies |
+
+- Local: `http://127.0.0.1:8000` (see `.env.example` / `.env.local`)
+- Production: `.env.production` → [be-trackforge Railway](https://be-trackforge-production-87d3.up.railway.app)
+- FE deploy: [iot-production Railway](https://iot-production-6e48.up.railway.app)
+
+Also set `EXPLORER_API_BASE` in the Railway/Vercel project env if the host does not load `.env.production`.
+
 First, run the development server:
 
 ```bash
