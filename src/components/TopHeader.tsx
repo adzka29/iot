@@ -21,8 +21,8 @@ const HEADER_NAV = [
   { href: "/alerts", label: "Alerts" },
   { href: "/explorer", label: "Explorer" },
   { href: "/history", label: "History" },
-  { href: "/reports", label: "Reports" },
-];
+  { href: "/reports", label: "Reports", disabled: true },
+] as const;
 
 export default function TopHeader({ floating = false }: { floating?: boolean }) {
   const router = useRouter();
@@ -89,6 +89,14 @@ export default function TopHeader({ floating = false }: { floating?: boolean }) 
       {floating ? null : (
         <nav className="cmd-nav" aria-label="Main">
           {HEADER_NAV.map((item) => {
+            const disabled = "disabled" in item && item.disabled;
+            if (disabled) {
+              return (
+                <span key={item.href} aria-disabled="true" title="Coming soon">
+                  {item.label}
+                </span>
+              );
+            }
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link key={item.href} href={item.href} className={active ? "is-active" : ""} aria-current={active ? "page" : undefined}>
