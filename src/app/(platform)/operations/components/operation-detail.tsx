@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   activateOperation,
@@ -15,7 +16,6 @@ import {
   operationGroups,
   operationMap,
   operationPersonnel,
-  operationTickets,
   readOperation,
   resumeOperation,
   statusCss,
@@ -25,21 +25,35 @@ import {
   type OperationDetail as OperationDetailDto,
   type OpGeofence,
   type OpMarker,
-  type OpTicket,
 } from "@/lib/operations";
 
 const OperationsMap = dynamic(() => import("./operations-map"), { ssr: false });
 
-type DetailTab = "overview" | "map" | "groups" | "alerts" | "tickets" | "geofences";
+type DetailTab = "overview" | "map" | "groups" | "alerts" | "geofences";
 
 const TABS: { id: DetailTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "map", label: "Map" },
   { id: "groups", label: "Groups & Personnel" },
   { id: "alerts", label: "Alerts" },
-  { id: "tickets", label: "Tickets" },
   { id: "geofences", label: "Geofences" },
 ];
+
+function alertSeverityClass(severity: string) {
+  return severity.toLowerCase().replaceAll("_", "-");
+}
+
+function formatAlertClock(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+}
 
 type OperationDetailProps = {
   operationId: number;
@@ -55,7 +69,6 @@ export default function OperationDetail({ operationId, onBack, onChanged }: Oper
   const [personnel, setPersonnel] = useState<{ soldier_id: number; group_id: number; group_name: string }[]>([]);
   const [groupItems, setGroupItems] = useState<GroupItem[]>([]);
   const [alerts, setAlerts] = useState<OpAlert[]>([]);
-  const [tickets, setTickets] = useState<OpTicket[]>([]);
   const [error, setError] = useState("");
   const [pending, setPending] = useState("");
   const [loading, setLoading] = useState(true);
@@ -64,13 +77,12 @@ export default function OperationDetail({ operationId, onBack, onChanged }: Oper
     setLoading(true);
     setError("");
     try {
-      const [next, map, people, groups, alertList, ticketList] = await Promise.all([
+      const [next, map, people, groups, alertList] = await Promise.all([
         readOperation(operationId, signal),
         operationMap(operationId, signal),
         operationPersonnel(operationId, signal),
         operationGroups(operationId, signal),
         operationAlerts(operationId, signal),
-        operationTickets(operationId, signal),
       ]);
       if (signal?.aborted) return;
       setDetail(next);
@@ -79,7 +91,6 @@ export default function OperationDetail({ operationId, onBack, onChanged }: Oper
       setPersonnel(people.items);
       setGroupItems(groups.items);
       setAlerts(alertList.items);
-      setTickets(ticketList.items);
     } catch (reason) {
       if (signal?.aborted) return;
       setError(reason instanceof Error ? reason.message : "Couldn't load operation");
@@ -121,7 +132,10 @@ export default function OperationDetail({ operationId, onBack, onChanged }: Oper
     return (
       <div className="op-detail">
         <button type="button" className="op-back" onClick={onBack}>
-          ← Operations
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M15 6 9 12l6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Operations
         </button>
         <p className="op-empty">{error || "Operation not found"}</p>
       </div>
@@ -138,15 +152,18 @@ export default function OperationDetail({ operationId, onBack, onChanged }: Oper
       <header className="op-detail-head">
         <div className="op-detail-title">
           <button type="button" className="op-back" onClick={onBack}>
-            ← Operations
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M15 6 9 12l6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Operations
           </button>
           <div className="op-detail-name">
             <h1>{detail.name}</h1>
             <span className={`op-status is-${statusCss(status)}`}>{statusLabel(status)}</span>
           </div>
           <p>
-            {detail.operation_code}
-            {detail.description ? ` · ${detail.description}` : ""}
+            <span className="op-code-chip">{detail.operation_code}</span>
+            {detail.description ? <span className="op-detail-desc">{detail.description}</span> : null}
           </p>
         </div>
         <div className="op-detail-actions">
@@ -220,7 +237,7 @@ export default function OperationDetail({ operationId, onBack, onChanged }: Oper
 
       {tab === "overview" ? (
         <div className="op-overview">
-          <div className="op-stat-grid">
+          <div className="op-stat-grid is-three">
             <article className="op-stat">
               <span>Personnel</span>
               <strong>{counts.personnel}</strong>
@@ -236,42 +253,36 @@ export default function OperationDetail({ operationId, onBack, onChanged }: Oper
               <strong>{counts.geofences}</strong>
               <small>zones</small>
             </article>
-            <article className="op-stat">
-              <span>Tickets</span>
-              <strong>{tickets.length}</strong>
-              <small>linked</small>
-            </article>
           </div>
 
           <div className="op-overview-grid">
-            <section className="op-panel">
-              <h2>Operation Information</h2>
-              <dl className="op-info-list">
+            <section className="op-panel is-info">
+              <div className="op-panel-head">
+                <h2>Operation Information</h2>
+                <span className="op-code-chip">{detail.operation_code}</span>
+              </div>
+              <dl className="op-info-list is-grid">
                 <div>
-                  <dt>operation_code</dt>
-                  <dd>{detail.operation_code}</dd>
-                </div>
-                <div>
-                  <dt>type</dt>
+                  <dt>Type</dt>
                   <dd>{detail.type ?? "—"}</dd>
                 </div>
                 <div>
-                  <dt>status</dt>
+                  <dt>Status</dt>
                   <dd>
                     <span className={`op-status is-${statusCss(status)}`}>{statusLabel(status)}</span>
                   </dd>
                 </div>
-                <div>
-                  <dt>schedule</dt>
+                <div className="is-wide">
+                  <dt>Schedule</dt>
                   <dd>{formatOpRange(detail.start_at, detail.end_at)}</dd>
                 </div>
                 <div>
-                  <dt>created_by</dt>
+                  <dt>Created by</dt>
                   <dd>{detail.created_by?.name ?? "—"}</dd>
                 </div>
-                <div>
-                  <dt>description</dt>
-                  <dd>{detail.description ?? "—"}</dd>
+                <div className="is-wide">
+                  <dt>Description</dt>
+                  <dd className={detail.description ? "" : "is-muted"}>{detail.description ?? "No description"}</dd>
                 </div>
               </dl>
             </section>
@@ -362,48 +373,37 @@ export default function OperationDetail({ operationId, onBack, onChanged }: Oper
 
       {tab === "alerts" ? (
         <div className="op-overview">
-          <section className="op-panel">
-            <h2>Alerts in scope</h2>
-            <ul className="op-built-members">
-              {alerts.map((alert) => (
-                <li key={alert.id}>
-                  <span>
-                    <strong>
-                      {alert.type} · {alert.severity}
-                    </strong>
-                    <em>
-                      {alert.status}
-                      {alert.soldier_id != null ? ` · S-${alert.soldier_id}` : ""}
-                      {alert.group_id != null ? ` · group #${alert.group_id}` : ""}
-                    </em>
-                  </span>
-                  <small>{new Date(alert.event_time).toLocaleString("en-GB")}</small>
-                </li>
-              ))}
-              {alerts.length === 0 ? <li className="op-empty">No alerts.</li> : null}
-            </ul>
-          </section>
-        </div>
-      ) : null}
-
-      {tab === "tickets" ? (
-        <div className="op-overview">
-          <section className="op-panel">
-            <h2>Tickets linked to scope alerts</h2>
-            <ul className="op-built-members">
-              {tickets.map((ticket) => (
-                <li key={ticket.id}>
-                  <span>
-                    <strong>{ticket.ticket_code}</strong>
-                    <em>
-                      {ticket.status} · {ticket.priority} · {ticket.alert_type}
-                      {ticket.source_alert_id != null ? ` · alert #${ticket.source_alert_id}` : ""}
-                    </em>
-                  </span>
-                </li>
-              ))}
-              {tickets.length === 0 ? <li className="op-empty">No tickets.</li> : null}
-            </ul>
+          <section className="op-panel op-alerts-panel">
+            <div className="op-alerts-head">
+              <h2>Alerts in scope</h2>
+              <small>
+                {alerts.length} total · {criticalAlerts} critical
+              </small>
+            </div>
+            {alerts.length === 0 ? (
+              <p className="op-empty">No alerts in this operation scope.</p>
+            ) : (
+              <ul className="op-alert-cards">
+                {alerts.map((alert) => (
+                  <li key={alert.id}>
+                    <Link href={`/alerts?id=${alert.id}`} className={`op-alert-card is-${alertSeverityClass(alert.severity)}`}>
+                      <div className="op-alert-card-top">
+                        <strong>{alert.type}</strong>
+                        <em className={`op-sev is-${alertSeverityClass(alert.severity)}`}>{alert.severity}</em>
+                        <span className="op-alert-status">{alert.status}</span>
+                      </div>
+                      <p>
+                        {alert.soldier_id != null ? `S-${alert.soldier_id}` : "No soldier"}
+                        {alert.group_id != null ? ` · Group #${alert.group_id}` : ""}
+                        {" · "}
+                        {formatAlertClock(alert.event_time)}
+                      </p>
+                      <span className="op-alert-detail">View Detail</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
         </div>
       ) : null}

@@ -60,7 +60,7 @@
 }
 
 .al-actions {
-  display: flex;
+  display: none;
   flex-wrap: wrap;
   gap: 8px;
 }

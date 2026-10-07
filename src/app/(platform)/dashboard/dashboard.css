@@ -1162,6 +1162,12 @@
   background: rgba(29, 78, 216, 0.35);
 }
 
+.cmd-geo-kinds button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: #8ea3bf;
+}
+
 .cmd-geo-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

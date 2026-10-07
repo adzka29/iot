@@ -35,9 +35,9 @@ const FENCE_KINDS: { id: FenceKind; label: string; color: string }[] = [
 
 type LayerView = "group" | "weapons";
 
-const LAYER_VIEWS: { id: LayerView; label: string }[] = [
-  { id: "group", label: "Group" },
-  { id: "weapons", label: "Weapons" },
+const LAYER_VIEWS: { id: LayerView; label: string; disabled?: boolean }[] = [
+  { id: "group", label: "Personal" },
+  { id: "weapons", label: "Weapons", disabled: true },
 ];
 
 function kindColor(kind: FenceKind) {
@@ -308,12 +308,6 @@ export default function OpsMap({
   const focusNonce = focus?.nonce;
   const focusKind = focus?.kind;
   useEffect(() => {
-    if (focusKind === "weapon") {
-      setLayer("weapons");
-      setLayersOpen(false);
-      onViewChange?.("weapons");
-      return;
-    }
     if (focusKind === "person") {
       setLayer("group");
       setLayersOpen(false);
@@ -475,55 +469,7 @@ export default function OpsMap({
       <div className="cmd-rail" role="group" aria-label="Map tools">
         <button type="button" aria-label="Zoom in" disabled={zoom >= 19} onClick={() => mapRef.current?.zoomIn()}>+</button>
         <button type="button" aria-label="Zoom out" disabled={zoom <= 3} onClick={() => mapRef.current?.zoomOut()}>−</button>
-        <div className="cmd-geo">
-          <button
-            type="button"
-            className={drawing || geoOpen ? "is-active" : undefined}
-            aria-label="Geofence tools"
-            aria-haspopup="dialog"
-            aria-expanded={geoOpen}
-            onClick={() => {
-              setGeoOpen((open) => !open);
-              setLayersOpen(false);
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M4 20h4.2L19.4 8.8a1.8 1.8 0 0 0 0-2.5l-1.7-1.7a1.8 1.8 0 0 0-2.5 0L4 15.8V20Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-              <path d="m13.6 6.2 4.2 4.2" stroke="currentColor" strokeWidth="1.7" />
-            </svg>
-          </button>
-          {geoOpen ? (
-            <div className="cmd-geo-menu" role="dialog" aria-label="Geofence settings">
-              <p>Apply as</p>
-              <div className="cmd-geo-kinds">
-                {FENCE_KINDS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={kind === item.id ? "is-active" : undefined}
-                    onClick={() => setKind(item.id)}
-                  >
-                    <i style={{ background: item.color }} />
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              <div className="cmd-geo-actions">
-                <button type="button" className="is-apply" onClick={applyFence}>
-                  Apply
-                </button>
-                <button
-                  type="button"
-                  className="is-delete"
-                  disabled={!drawing && fences.length === 0}
-                  onClick={deleteFence}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
+        {/* Geofence pencil tools hidden for now */}
         <div className="cmd-layer">
           <button
             type="button"
@@ -550,7 +496,11 @@ export default function OpsMap({
                     key={item.id}
                     type="button"
                     className={layer === item.id ? "is-active" : undefined}
+                    disabled={item.disabled}
+                    aria-disabled={item.disabled || undefined}
+                    title={item.disabled ? "Coming soon" : undefined}
                     onClick={() => {
+                      if (item.disabled) return;
                       setLayer(item.id);
                       setLayersOpen(false);
                       onViewChange?.(item.id);
