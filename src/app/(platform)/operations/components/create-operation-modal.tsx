@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import DateTimePicker from "./datetime-picker";
+import { latestPinsFromExplorer, listExplorer, type LiveSoldierPin } from "@/lib/explorer";
 import {
   FENCE_COLORS,
   OPERATION_TYPES,
@@ -26,7 +27,36 @@ import {
   type OpPerson,
   type OperationDraft,
   type OperationType,
+  type PersonnelChoice,
 } from "@/lib/operations";
+
+function pinToOpPerson(pin: LiveSoldierPin): OpPerson {
+  return {
+    id: String(pin.soldierId),
+    label: `S-${pin.soldierId}`,
+    name: pin.group?.trim() || `Soldier ${pin.soldierId}`,
+    status: pin.tone === "critical" ? "critical" : pin.tone === "warn" ? "standby" : "active",
+    position: pin.position,
+  };
+}
+
+/** Same soldiers as the main dashboard map (explorer TELEMETRY), merged with Settings personnel. */
+function mergePersonnelOptions(choices: PersonnelChoice[], pins: LiveSoldierPin[]): OpPerson[] {
+  const byId = new Map<string, OpPerson>();
+  for (const choice of choices) {
+    byId.set(String(choice.soldier_id), toOpPerson(choice));
+  }
+  for (const pin of pins) {
+    const id = String(pin.soldierId);
+    const existing = byId.get(id);
+    if (existing) {
+      byId.set(id, { ...existing, position: pin.position });
+    } else {
+      byId.set(id, pinToOpPerson(pin));
+    }
+  }
+  return [...byId.values()].sort((a, b) => Number(a.id) - Number(b.id));
+}
 
 const OperationsMap = dynamic(() => import("./operations-map"), { ssr: false });
 
@@ -66,6 +96,7 @@ export default function CreateOperationModal({
   const [peopleNote, setPeopleNote] = useState("");
   const [existingGroups, setExistingGroups] = useState<GroupRef[]>([]);
   const [linkGroupId, setLinkGroupId] = useState<number | "">("");
+  const [linkGroupQuery, setLinkGroupQuery] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -85,28 +116,35 @@ export default function CreateOperationModal({
     setNewFenceKind("recon");
     setSelectedFenceId(null);
     setLinkGroupId("");
-    setPeopleNote("Loading personnel options…");
+    setLinkGroupQuery("");
+    setPeopleNote("Loading personnel from map…");
     const controller = new AbortController();
-    // BE wizard helpers: personnel/options (last TELEMETRY lat/lon) + groups/options.
+    // Same TELEMETRY pins as the main map, plus Settings personnel/groups when available.
     Promise.all([
-      operationPersonnelOptions("", controller.signal),
-      operationGroupOptions(controller.signal),
+      operationPersonnelOptions("", controller.signal).catch(() => ({ items: [] as PersonnelChoice[] })),
+      operationGroupOptions(controller.signal).catch(() => ({ items: [] as GroupRef[] })),
+      listExplorer(
+        { category: "TELEMETRY", timeRange: "30d", limit: 150 },
+        controller.signal,
+      ).catch(() => ({ items: [] })),
     ])
-      .then(([personnel, groups]) => {
+      .then(([personnel, groups, explorer]) => {
         if (controller.signal.aborted) return;
-        setPeople(personnel.items.map(toOpPerson));
+        const pins = latestPinsFromExplorer(explorer.items ?? []);
+        const merged = mergePersonnelOptions(personnel.items, pins);
+        setPeople(merged);
         setExistingGroups(groups.items);
         setPeopleNote(
-          personnel.items.length
+          merged.length
             ? ""
-            : "No personnel options — ensure soldiers exist in Personnel with TELEMETRY.",
+            : "No map personnel — ensure TELEMETRY pins exist on the main map.",
         );
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
         setPeople([]);
         setExistingGroups([]);
-        setPeopleNote(reason instanceof Error ? reason.message : "Couldn't load personnel options");
+        setPeopleNote(reason instanceof Error ? reason.message : "Couldn't load personnel");
       });
     return () => controller.abort();
   }, [open]);
@@ -222,11 +260,25 @@ export default function CreateOperationModal({
     });
   }
 
+  const linkedExistingIds = new Set(
+    draft.assignments.map((a) => a.existingGroupId).filter((id): id is number => id != null),
+  );
+  const linkableGroups = existingGroups.filter((g) => !linkedExistingIds.has(g.id));
+  const linkQuery = linkGroupQuery.trim().toLowerCase();
+  const linkSuggestions = linkableGroups.filter((g) =>
+    !linkQuery ? true : g.name.toLowerCase().includes(linkQuery),
+  );
+  const linkMatch =
+    (linkGroupId !== ""
+      ? linkableGroups.find((item) => item.id === linkGroupId)
+      : undefined) ??
+    (linkQuery
+      ? linkableGroups.find((item) => item.name.toLowerCase() === linkQuery)
+      : undefined);
+
   function linkExistingGroup() {
-    if (linkGroupId === "") return;
-    const group = existingGroups.find((item) => item.id === linkGroupId);
-    if (!group) return;
-    if (draft.assignments.some((a) => a.existingGroupId === group.id)) return;
+    if (!linkMatch) return;
+    const group = linkMatch;
     setDraft((current) => {
       const nextAssignments = [
         ...current.assignments,
@@ -245,12 +297,8 @@ export default function CreateOperationModal({
       };
     });
     setLinkGroupId("");
+    setLinkGroupQuery("");
   }
-
-  const linkedExistingIds = new Set(
-    draft.assignments.map((a) => a.existingGroupId).filter((id): id is number => id != null),
-  );
-  const linkableGroups = existingGroups.filter((g) => !linkedExistingIds.has(g.id));
 
   function removeDraftFence(id: string) {
     setDraft((current) => ({
@@ -404,7 +452,7 @@ export default function CreateOperationModal({
                   <div className="op-assign-head">
                     <div>
                       <h4>Map personnel</h4>
-                      <small>Personnel options with last TELEMETRY position</small>
+                      <small>Same soldiers as the main map (last TELEMETRY position)</small>
                     </div>
                     <span className="op-assign-count">{pickedPeople.length} selected</span>
                   </div>
@@ -473,32 +521,62 @@ export default function CreateOperationModal({
                     <div className="op-create-group-title">Link existing group</div>
                     <div className="op-assign-target">
                       <label>
-                        <span>From Settings groups</span>
-                        <select
-                          value={linkGroupId === "" ? "" : String(linkGroupId)}
-                          onChange={(e) =>
-                            setLinkGroupId(e.target.value ? Number(e.target.value) : "")
-                          }
-                        >
-                          <option value="">Select group…</option>
+                        <span>Type group name (from Settings)</span>
+                        <input
+                          list="op-link-group-options"
+                          value={linkGroupQuery}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setLinkGroupQuery(value);
+                            const exact = linkableGroups.find(
+                              (g) => g.name.toLowerCase() === value.trim().toLowerCase(),
+                            );
+                            setLinkGroupId(exact ? exact.id : "");
+                          }}
+                          placeholder="e.g. Alpha Squad"
+                          autoComplete="off"
+                        />
+                        <datalist id="op-link-group-options">
                           {linkableGroups.map((group) => (
-                            <option key={group.id} value={group.id}>
-                              {group.name} · {group.personnel_count} personnel
-                            </option>
+                            <option
+                              key={group.id}
+                              value={group.name}
+                              label={`${group.personnel_count} personnel`}
+                            />
                           ))}
-                        </select>
+                        </datalist>
                       </label>
                       <button
                         type="button"
                         className="op-btn is-ghost is-compact"
-                        disabled={linkGroupId === ""}
+                        disabled={!linkMatch}
                         onClick={linkExistingGroup}
                       >
                         Link group
                       </button>
                     </div>
+                    {linkGroupQuery.trim() && !linkMatch && linkSuggestions.length > 0 ? (
+                      <ul className="op-link-suggestions">
+                        {linkSuggestions.slice(0, 6).map((group) => (
+                          <li key={group.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLinkGroupQuery(group.name);
+                                setLinkGroupId(group.id);
+                              }}
+                            >
+                              <strong>{group.name}</strong>
+                              <small>{group.personnel_count} personnel</small>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                     {!linkableGroups.length ? (
-                      <p className="op-empty">No more ACTIVE groups to link (or all already linked).</p>
+                      <p className="op-empty">No ACTIVE Settings groups to link (or all already linked).</p>
+                    ) : linkGroupQuery.trim() && !linkMatch ? (
+                      <p className="op-empty">No matching group — pick a suggestion or type the exact name.</p>
                     ) : null}
                   </div>
 
