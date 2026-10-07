@@ -659,23 +659,23 @@ export function mapPayloadToMarkers(map: OperationMapPayload): OpMarker[] {
 }
 
 export function mapPayloadToFences(map: OperationMapPayload): OpGeofence[] {
-  return (map.geofences ?? [])
-    .map((g) => {
-      const kind = (g.kind === "restricted" || g.kind === "safe" ? g.kind : "recon") as FenceKind;
-      const points = bePolygonToLatLng(g.polygon ?? []);
-      if (points.length < 3) return null;
-      return {
-        id: String(g.id),
-        name: g.name,
-        kind,
-        color: g.color || FENCE_COLORS[kind],
-        // Map payload from BE is id/name/polygon only — estimate area client-side.
-        areaKm2: estimatePolygonAreaKm2(points),
-        points,
-        existingId: g.id,
-      } satisfies OpGeofence;
-    })
-    .filter((fence): fence is OpGeofence => fence != null);
+  const fences: OpGeofence[] = [];
+  for (const g of map.geofences ?? []) {
+    const kind = (g.kind === "restricted" || g.kind === "safe" ? g.kind : "recon") as FenceKind;
+    const points = bePolygonToLatLng(g.polygon ?? []);
+    if (points.length < 3) continue;
+    fences.push({
+      id: String(g.id),
+      name: g.name,
+      kind,
+      color: g.color || FENCE_COLORS[kind],
+      // Map payload from BE is id/name/polygon only — estimate area client-side.
+      areaKm2: estimatePolygonAreaKm2(points),
+      points,
+      existingId: g.id,
+    });
+  }
+  return fences;
 }
 
 export function emptyDraft(): OperationDraft {
