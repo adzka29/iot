@@ -198,14 +198,25 @@ function FlyToFocus({
 
 function FitOperationFences({ fences }: { fences: OperationMapFence[] }) {
   const map = useMap();
+  // Stable signature of which zones are on the map — not the array identity.
+  // Dashboard polls operation maps every 5s and builds a new `fences` array each
+  // time; depending on that array was re-running fitBounds and yanking zoom/pan.
   const key = fences.map((fence) => fence.id).sort().join(",");
+  const fencesRef = useRef(fences);
+  fencesRef.current = fences;
+  const fittedKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!key) return;
-    const points = fences.flatMap((fence) => fence.points);
+    if (!key) {
+      fittedKeyRef.current = null;
+      return;
+    }
+    if (fittedKeyRef.current === key) return;
+    const points = fencesRef.current.flatMap((fence) => fence.points);
     if (points.length < 2) return;
+    fittedKeyRef.current = key;
     map.fitBounds(points, { padding: [48, 48], maxZoom: 15, animate: false });
-    // Only re-fit when the set of fence ids changes (not on every poll redraw).
-  }, [map, key, fences]);
+  }, [map, key]);
   return null;
 }
 
